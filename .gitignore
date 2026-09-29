@@ -1,0 +1,17 @@
+venv/
+__pycache__/
+*.pyc
+
+.env
+data/
+qdrant_storage/
+output/
+
+# Repo public — testset chứa cụm từ trích từ nội dung YouMed có bản quyền,
+# không phát hành lại (thiết kế mục 6.2). Giữ eval/testset/.gitkeep làm placeholder.
+eval/testset/*.jsonl
+
+*.log
+
+# Tài liệu thiết kế nội bộ — chưa public trước khi bảo vệ đồ án
+medical_agentic_rag_5_phase_design_v4.html
