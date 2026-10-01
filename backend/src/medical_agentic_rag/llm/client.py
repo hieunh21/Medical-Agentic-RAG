@@ -1,19 +1,35 @@
-"""Client google-genai trỏ tới endpoint shopaikey.
+"""Client google-genai trỏ tới endpoint shopaikey — một hàm run_task() duy nhất.
 
-Phase 1 chỉ cần một task: generate_answer (text thuần, có trích dẫn [n]).
-Retry/budget/schema đầy đủ cho các task khác được thêm ở Phase 2 (module llm/
-đã tách sẵn để mở rộng mà không phải đổi cách gọi từ node/graph).
+Node trong graph không gọi SDK trực tiếp: run_task() lo chọn model theo task,
+output có schema, retry, trừ ngân sách và ghi log.
 """
 from __future__ import annotations
 
-import asyncio
+import time
+from typing import Optional, TypeVar
 
 from google import genai
 from google.genai import errors, types
+from pydantic import BaseModel, ValidationError
 
+from medical_agentic_rag import budget
 from medical_agentic_rag.config import settings
+from medical_agentic_rag.llm.tasks import TASKS
+from medical_agentic_rag.observability import trace
+
+T = TypeVar("T", bound=BaseModel)
 
 _client: genai.Client | None = None
+
+MODEL_BY_TIER = {
+    "fast": settings.LLM_MODEL_FAST,
+    "strong": settings.LLM_MODEL_STRONG,
+    "judge": settings.LLM_MODEL_JUDGE,
+}
+
+
+class LLMTaskFailed(RuntimeError):
+    pass
 
 
 def get_client() -> genai.Client:
@@ -29,17 +45,27 @@ def get_client() -> genai.Client:
     return _client
 
 
-async def generate_answer(prompt: str, retries: int = 2) -> str:
+async def run_task(task: str, contents: str, state: dict, schema: Optional[type[T]] = None) -> T | str:
+    spec = TASKS[task]
     client = get_client()
-    cfg = types.GenerateContentConfig(temperature=0.2, max_output_tokens=1024)
+    cfg = types.GenerateContentConfig(
+        temperature=spec.temperature,
+        max_output_tokens=spec.max_output_tokens,
+        response_mime_type="application/json" if schema else None,
+        response_schema=schema,
+    )
     last_exc: Exception | None = None
-    for attempt in range(retries):
+    for attempt in range(2):  # tối đa 1 lần thử lại
+        budget.charge_llm(state, task)
+        t0 = time.perf_counter()
         try:
             resp = await client.aio.models.generate_content(
-                model=settings.LLM_MODEL_STRONG, contents=prompt, config=cfg,
+                model=MODEL_BY_TIER[spec.model_tier], contents=contents, config=cfg,
             )
-            return resp.text or ""
-        except errors.APIError as exc:
+            out = schema.model_validate_json(resp.text) if schema else (resp.text or "")
+            trace.log_llm(state, task, attempt, t0, ok=True)
+            return out
+        except (ValidationError, errors.APIError) as exc:
             last_exc = exc
-            await asyncio.sleep(1.0 * (attempt + 1))
-    raise RuntimeError(f"generate_answer failed after {retries} attempts: {last_exc}")
+            trace.log_llm(state, task, attempt, t0, ok=False, error=type(exc).__name__)
+    raise LLMTaskFailed(f"{task}: {last_exc}")

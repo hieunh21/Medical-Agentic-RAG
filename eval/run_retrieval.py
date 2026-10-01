@@ -59,42 +59,66 @@ def search(client, question: str, mode: str, top_k: int = 30) -> List[dict]:
     return chunks
 
 
-def main(argv: List[str] | None = None) -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--testset", required=True)
-    ap.add_argument("--mode", choices=MODES, default="hybrid_rerank")
-    args = ap.parse_args(argv)
+def avg(xs: List[float]) -> float:
+    return sum(xs) / len(xs) if xs else float("nan")
 
-    with open(args.testset, encoding="utf-8") as f:
-        rows = [json.loads(line) for line in f if line.strip()]
 
-    client = get_client()
-    article5, recall10, mrr10, ndcg10 = [], [], [], []
-
-    for row in rows:
-        chunks = search(client, row["question"], args.mode)
-        if "gold_urls" in row:
-            ranked_urls = []
-            for c in chunks:
-                if c["url"] not in ranked_urls:
-                    ranked_urls.append(c["url"])
-            article5.append(article_at_k(ranked_urls, row["gold_urls"], k=5))
-        if "gold_chunk_id" in row:
-            ids = [c["chunk_id"] for c in chunks]
-            recall10.append(recall_at_k(row["gold_chunk_id"], ids, k=10))
-            mrr10.append(mrr_at_k(row["gold_chunk_id"], ids, k=10))
-            ndcg10.append(ndcg_at_k(row["gold_chunk_id"], ids, k=10))
-
-    def avg(xs: List[float]) -> float:
-        return sum(xs) / len(xs) if xs else float("nan")
-
-    print(f"mode={args.mode} n={len(rows)}")
+def print_block(label: str, article5: List[float], recall10: List[float],
+                 mrr10: List[float], ndcg10: List[float]) -> None:
+    print(label)
     if article5:
         print(f"  Article@5  = {avg(article5):.3f}  (n={len(article5)})")
     if recall10:
         print(f"  Recall@10  = {avg(recall10):.3f}")
         print(f"  MRR@10     = {avg(mrr10):.3f}")
         print(f"  nDCG@10    = {avg(ndcg10):.3f}")
+
+
+def main(argv: List[str] | None = None) -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--testset", required=True)
+    ap.add_argument("--mode", choices=MODES, default="hybrid_rerank")
+    ap.add_argument("--group-by", help="Tên field trong testset để tách kết quả (vd: difficulty)")
+    args = ap.parse_args(argv)
+
+    with open(args.testset, encoding="utf-8") as f:
+        rows = [json.loads(line) for line in f if line.strip()]
+
+    client = get_client()
+    results: List[dict] = []
+
+    for row in rows:
+        chunks = search(client, row["question"], args.mode)
+        r = {"group": row.get(args.group_by) if args.group_by else None}
+        if "gold_urls" in row:
+            ranked_urls = []
+            for c in chunks:
+                if c["url"] not in ranked_urls:
+                    ranked_urls.append(c["url"])
+            r["article5"] = article_at_k(ranked_urls, row["gold_urls"], k=5)
+        if "gold_chunk_id" in row:
+            ids = [c["chunk_id"] for c in chunks]
+            r["recall10"] = recall_at_k(row["gold_chunk_id"], ids, k=10)
+            r["mrr10"] = mrr_at_k(row["gold_chunk_id"], ids, k=10)
+            r["ndcg10"] = ndcg_at_k(row["gold_chunk_id"], ids, k=10)
+        results.append(r)
+
+    def block(rs: List[dict]) -> tuple:
+        return (
+            [r["article5"] for r in rs if "article5" in r],
+            [r["recall10"] for r in rs if "recall10" in r],
+            [r["mrr10"] for r in rs if "mrr10" in r],
+            [r["ndcg10"] for r in rs if "ndcg10" in r],
+        )
+
+    print(f"mode={args.mode} n={len(rows)}")
+    print_block("overall", *block(results))
+
+    if args.group_by:
+        groups = sorted({r["group"] for r in results}, key=lambda g: (g is None, g))
+        for g in groups:
+            rs = [r for r in results if r["group"] == g]
+            print_block(f"-- {args.group_by}={g} --", *block(rs))
     return 0
 
 

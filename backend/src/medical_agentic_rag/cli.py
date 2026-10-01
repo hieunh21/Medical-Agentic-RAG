@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI thử end-to-end baseline Phase 1: hybrid retrieve -> rerank -> generate_answer.
+"""CLI hỏi đáp end-to-end (Phase 1+2): graph retrieve -> rerank -> grade -> (sửa)* -> trả lời.
 
 Usage (chạy từ repo root, cần model server :8001 và Qdrant đã ingest xong):
     python -m medical_agentic_rag.cli "Bệnh Addison là gì?"
@@ -8,24 +8,23 @@ from __future__ import annotations
 
 import asyncio
 import sys
+import uuid
 
-from medical_agentic_rag.answer import build_prompt, format_sources
-from medical_agentic_rag.llm.client import generate_answer
-from medical_agentic_rag.retrieval.hybrid import retrieve
-from medical_agentic_rag.retrieval.rerank import rerank_and_select
-
-NO_INFO = "YouMed hiện chưa có bài viết về vấn đề này. Bạn nên hỏi ý kiến bác sĩ để được tư vấn chính xác."
+from medical_agentic_rag.graph.build import get_graph
+from medical_agentic_rag.graph.state import init_state
 
 
 async def ask(question: str) -> dict:
-    candidates = retrieve(question)
-    chunks = rerank_and_select(question, candidates)
-    if not chunks:
-        return {"answer": NO_INFO, "sources": []}
-
-    prompt = build_prompt(question, chunks)
-    answer = await generate_answer(prompt)
-    return {"answer": answer, "sources": format_sources(chunks)}
+    graph = get_graph()
+    state = init_state(question, trace_id=str(uuid.uuid4()))
+    result = await graph.ainvoke(state)
+    return {
+        "answer": result["final_answer"],
+        "sources": result.get("sources") or [],
+        "evidence_status": result.get("evidence_status"),
+        "corrections": result.get("corrections", 0),
+        "llm_calls": result.get("llm_calls", 0),
+    }
 
 
 def main() -> int:
@@ -40,6 +39,7 @@ def main() -> int:
     print("\n=== NGUỒN ===")
     for s in result["sources"]:
         print(f"[{s['n']}] {s['title']} — {s['url']}")
+    print(f"\n(evidence_status={result['evidence_status']}, corrections={result['corrections']}, llm_calls={result['llm_calls']})")
     return 0
 
 
