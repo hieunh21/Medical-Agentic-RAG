@@ -12,15 +12,19 @@ from ingestion.vi_sparse import query_sparse
 from medical_agentic_rag.config import settings
 
 
-def retrieve(question: str, limit: int | None = None, section_type: Optional[str] = None) -> List[dict]:
+def retrieve(
+    question: str, limit: int | None = None,
+    section_type: Optional[str] = None, article_id: Optional[str] = None,
+) -> List[dict]:
     dense_vec = embed_query(question)
     sparse_vec = query_sparse(question)
     client = get_client()
-    query_filter = None
+    conditions = []
     if section_type:
-        query_filter = models.Filter(
-            must=[models.FieldCondition(key="section_type", match=models.MatchValue(value=section_type))],
-        )
+        conditions.append(models.FieldCondition(key="section_type", match=models.MatchValue(value=section_type)))
+    if article_id:
+        conditions.append(models.FieldCondition(key="article_id", match=models.MatchValue(value=article_id)))
+    query_filter = models.Filter(must=conditions) if conditions else None
     points = hybrid_query(
         client, dense_vec, sparse_vec,
         limit=limit or settings.FUSION_TOP_N,

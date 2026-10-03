@@ -9,4 +9,6 @@ uvicorn>=0.29
 pydantic>=2.6
 google-genai>=0.3
 langgraph>=0.2
+langgraph-checkpoint-sqlite>=2.0
+rapidfuzz>=3.6
 pytest>=8.0

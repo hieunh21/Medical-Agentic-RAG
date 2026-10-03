@@ -58,6 +58,23 @@ def upsert_chunks(
         client.upsert(QDRANT_COLLECTION, points=points[i : i + batch_size])
 
 
+def get_chunks_by_article(client: QdrantClient, article_id: str, limit: int = 50) -> List[dict]:
+    """Toàn bộ chunk của 1 bài — dùng cho get_article_outline() của research agent."""
+    points, _ = client.scroll(
+        QDRANT_COLLECTION, limit=limit, with_payload=True, with_vectors=False,
+        scroll_filter=models.Filter(
+            must=[models.FieldCondition(key="article_id", match=models.MatchValue(value=article_id))],
+        ),
+    )
+    return [p.payload for p in points]
+
+
+def get_chunks_by_ids(client: QdrantClient, chunk_ids: List[str]) -> List[dict]:
+    """Đọc nguyên văn một số chunk_id cụ thể — dùng cho read_chunks() của research agent."""
+    points = client.retrieve(QDRANT_COLLECTION, ids=[point_id(c) for c in chunk_ids], with_payload=True)
+    return [p.payload for p in points]
+
+
 def hybrid_query(
     client: QdrantClient,
     dense_vec: List[float],

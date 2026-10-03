@@ -6,8 +6,9 @@ output có schema, retry, trừ ngân sách và ghi log.
 from __future__ import annotations
 
 import time
-from typing import Optional, TypeVar
+from typing import Any, Optional, TypeVar
 
+import httpx
 from google import genai
 from google.genai import errors, types
 from pydantic import BaseModel, ValidationError
@@ -45,7 +46,11 @@ def get_client() -> genai.Client:
     return _client
 
 
-async def run_task(task: str, contents: str, state: dict, schema: Optional[type[T]] = None) -> T | str:
+async def run_task(
+    task: str, contents: Any, state: dict,
+    schema: Optional[type[T]] = None, tools: Optional[list] = None,
+) -> T | str:
+    """tools != None (research_agent): trả về response gốc (caller đọc .function_calls)."""
     spec = TASKS[task]
     client = get_client()
     cfg = types.GenerateContentConfig(
@@ -53,6 +58,11 @@ async def run_task(task: str, contents: str, state: dict, schema: Optional[type[
         max_output_tokens=spec.max_output_tokens,
         response_mime_type="application/json" if schema else None,
         response_schema=schema,
+        tools=tools,
+        # thinking tokens (gemini-2.5) trừ vào chính max_output_tokens — từng làm
+        # cắt cụt JSON và research_agent trả rỗng giữa vòng lặp. Mức thinking cấu
+        # hình riêng theo từng task (xem llm/tasks.py) thay vì tắt toàn cục.
+        thinking_config=types.ThinkingConfig(thinking_budget=spec.thinking_budget),
     )
     last_exc: Exception | None = None
     for attempt in range(2):  # tối đa 1 lần thử lại
@@ -62,10 +72,13 @@ async def run_task(task: str, contents: str, state: dict, schema: Optional[type[
             resp = await client.aio.models.generate_content(
                 model=MODEL_BY_TIER[spec.model_tier], contents=contents, config=cfg,
             )
-            out = schema.model_validate_json(resp.text) if schema else (resp.text or "")
+            if tools:
+                out = resp
+            else:
+                out = schema.model_validate_json(resp.text) if schema else (resp.text or "")
             trace.log_llm(state, task, attempt, t0, ok=True)
             return out
-        except (ValidationError, errors.APIError) as exc:
+        except (ValidationError, errors.APIError, httpx.TransportError) as exc:
             last_exc = exc
             trace.log_llm(state, task, attempt, t0, ok=False, error=type(exc).__name__)
     raise LLMTaskFailed(f"{task}: {last_exc}")

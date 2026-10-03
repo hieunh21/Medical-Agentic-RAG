@@ -14,6 +14,10 @@ CONTEXT:
 CÂU HỎI: {question}"""
 
 PARTIAL_NOTE = "- CONTEXT chỉ trả lời được một phần câu hỏi, hãy nói rõ phần nào chưa có thông tin.\n"
+SYMPTOM_NOTE = (
+    "- Người hỏi mô tả triệu chứng, không nêu tên bệnh: chỉ nêu các khả năng được CONTEXT "
+    "mô tả, không kết luận người hỏi mắc bệnh gì, luôn khuyên đi khám để chẩn đoán chính xác.\n"
+)
 
 
 def format_context(chunks: List[dict]) -> str:
@@ -24,9 +28,16 @@ def format_context(chunks: List[dict]) -> str:
     return "\n".join(lines)
 
 
-def build_prompt(question: str, chunks: List[dict], evidence_status: Optional[str] = None) -> str:
-    partial_note = PARTIAL_NOTE if evidence_status == "partial" else ""
-    return PROMPT_TEMPLATE.format(context=format_context(chunks), question=question, partial_note=partial_note)
+def build_prompt(
+    question: str, chunks: List[dict],
+    evidence_status: Optional[str] = None, question_type: Optional[str] = None,
+) -> str:
+    notes = ""
+    if evidence_status == "partial":
+        notes += PARTIAL_NOTE
+    if question_type == "symptom_to_condition":
+        notes += SYMPTOM_NOTE
+    return PROMPT_TEMPLATE.format(context=format_context(chunks), question=question, partial_note=notes)
 
 
 def format_sources(chunks: List[dict]) -> List[dict]:
