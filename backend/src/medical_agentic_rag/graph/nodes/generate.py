@@ -7,6 +7,7 @@ sách câu bị loại.
 from __future__ import annotations
 
 from langchain_core.messages import AIMessage
+from langchain_core.runnables import RunnableConfig
 
 from medical_agentic_rag.answer import build_prompt, format_sources
 from medical_agentic_rag.budget import BudgetExceeded
@@ -20,7 +21,12 @@ GENERATE_FAILED = "Hệ thống tạm thời chưa tạo được câu trả l�
 NO_INFO = "YouMed hiện chưa có bài viết về vấn đề này. Bạn nên hỏi ý kiến bác sĩ để được tư vấn chính xác."
 
 
-async def generate_answer_node(state: State) -> dict:
+async def generate_answer_node(state: State, config: RunnableConfig) -> dict:
+    """config["configurable"]["on_token"] (nếu có) nhận từng mảnh text để API stream ra frontend.
+
+    Lượt viết lại (regenerations > 0) KHÔNG stream: bản nháp cũ đã hiện trên UI rồi, stream tiếp
+    sẽ chèn chữ vào giữa câu trả lời cũ. API tự thay toàn bộ text khi nhận event done.
+    """
     chunks = state["reranked_chunks"]
     if "coverage" not in state:  # chưa qua grader (baseline / fast path): không khẳng định đủ hay thiếu
         status = None
@@ -37,8 +43,9 @@ async def generate_answer_node(state: State) -> dict:
         "evidence_status": status,
         "active_article_ids": list({c["article_id"] for c in chunks}),
     }
+    on_token = (config.get("configurable") or {}).get("on_token") if not state.get("regenerations") else None
     try:
-        out["draft_answer"] = await run_task("generate_answer", prompt, state)
+        out["draft_answer"] = await run_task("generate_answer", prompt, state, on_token=on_token)
         out["generate_failed"] = False
     except (LLMTaskFailed, BudgetExceeded):
         if state.get("draft_answer") and state.get("regenerations"):

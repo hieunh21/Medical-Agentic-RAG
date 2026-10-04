@@ -72,7 +72,7 @@ def test_baseline_chay_end_to_end_bang_mock(monkeypatch):
     monkeypatch.setattr(retrieve_mod, "retrieve", lambda q: [dict(CHUNK, score=1.0)])
     monkeypatch.setattr(retrieve_mod, "rerank_and_select", lambda q, cs: [dict(c, rerank_score=1.0) for c in cs])
 
-    async def fake_run_task(task, prompt, state, schema=None, tools=None):
+    async def fake_run_task(task, prompt, state, schema=None, tools=None, on_token=None):
         assert task == "generate_answer"  # baseline chỉ được gọi LLM đúng 1 lần, để generate
         assert "chỉ trả lời được một phần" not in prompt  # chưa qua grader -> không gắn nhãn partial
         state["llm_calls"] = state.get("llm_calls", 0) + 1

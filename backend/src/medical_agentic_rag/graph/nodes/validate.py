@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from langchain_core.messages import AIMessage
 
+from medical_agentic_rag.answer import format_sources
 from medical_agentic_rag.budget import BudgetExceeded
 from medical_agentic_rag.citation import validator as v
 from medical_agentic_rag.errors import LLMTaskFailed
@@ -49,9 +50,10 @@ async def validate_citations(state: State) -> dict:
     if state.get("generate_failed"):
         return _finalize(state, draft, {})
 
+    sources = format_sources(state["reranked_chunks"])  # một dòng mỗi bài, [n] khớp context
     sentences = v.split_sentences(draft)
     v.check_citations(
-        sentences, len(state["reranked_chunks"]),
+        sentences, len(sources),
         restrict_dose=state.get("safety_label") == "medication_dosing",
     )
     await _verify(state, sentences)
@@ -66,10 +68,12 @@ async def validate_citations(state: State) -> dict:
 
     if not kept:
         return _finalize(state, NO_INFO, {"claims": counts, "sources": [], "evidence_status": "insufficient"})
+
+    kept_sources = v.renumber_citations(kept, sources)  # bỏ nguồn không được trích, đánh số lại
     text = v.rebuild(kept)
     if removed and state.get("regenerations"):
         text += FILTERED_NOTE
-    return _finalize(state, text, {"claims": counts})
+    return _finalize(state, text, {"claims": counts, "sources": kept_sources})
 
 
 def finalize_answer(state: State) -> dict:

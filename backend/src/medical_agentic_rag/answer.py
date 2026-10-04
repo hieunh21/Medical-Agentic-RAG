@@ -40,11 +40,31 @@ SAFETY_NOTES = {
 }
 
 
+def group_by_article(chunks: List[dict]) -> List[dict]:
+    """Gộp các đoạn cùng một bài thành MỘT nguồn được đánh số.
+
+    [n] trỏ tới một BÀI, không phải một đoạn: MAX_CHUNKS_PER_ARTICLE cho phép 2 đoạn cùng bài,
+    mà hai đoạn đó có chung title và url nên trước đây hiện thành hai dòng nguồn trùng nhau.
+    Giữ thứ tự xuất hiện (tức thứ tự rerank).
+    """
+    groups: dict[str, dict] = {}
+    for c in chunks:
+        g = groups.get(c["article_id"])
+        if g is None:
+            groups[c["article_id"]] = {
+                "article_id": c["article_id"], "title": c["title"], "url": c["url"],
+                "updated_date": c.get("updated_date"), "texts": [c["text"]],
+            }
+        else:
+            g["texts"].append(c["text"])
+    return list(groups.values())
+
+
 def format_context(chunks: List[dict]) -> str:
     lines = []
-    for i, c in enumerate(chunks, 1):
-        updated = f" — cập nhật {c['updated_date']}" if c.get("updated_date") else ""
-        lines.append(f"[{i}] ({c['title']}{updated}) {c['text']}")
+    for i, g in enumerate(group_by_article(chunks), 1):
+        updated = f" — cập nhật {g['updated_date']}" if g.get("updated_date") else ""
+        lines.append(f"[{i}] ({g['title']}{updated}) " + "\n".join(g["texts"]))
     return "\n".join(lines)
 
 
@@ -65,7 +85,8 @@ def build_prompt(
 
 
 def format_sources(chunks: List[dict]) -> List[dict]:
+    """Một dòng nguồn cho mỗi bài, số thứ tự khớp với [n] trong format_context()."""
     return [
-        {"n": i, "title": c["title"], "url": c["url"], "updated_date": c.get("updated_date")}
-        for i, c in enumerate(chunks, 1)
+        {"n": i, "title": g["title"], "url": g["url"], "updated_date": g["updated_date"]}
+        for i, g in enumerate(group_by_article(chunks), 1)
     ]

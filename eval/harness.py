@@ -19,7 +19,9 @@ from typing import Optional
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "backend" / "src"))
 
+from medical_agentic_rag.answer import format_sources  # noqa: E402
 from medical_agentic_rag.citation import validator as v  # noqa: E402
+from medical_agentic_rag.citation.validator import REF_RE  # noqa: E402
 from medical_agentic_rag.graph.nodes.validate import FILTERED_NOTE  # noqa: E402
 from medical_agentic_rag.graph.state import init_state  # noqa: E402
 from medical_agentic_rag.llm import client as llm_client  # noqa: E402
@@ -48,11 +50,11 @@ async def judge_answer(answer: str, chunks: list[dict]) -> Optional[dict]:
     for template in (HIGH_RISK_PREFIX, EMERGENCY_TOPIC_NOTE, FILTERED_NOTE):
         answer = answer.replace(template.strip(), "")
     answer = answer.strip()
-    if not answer or REFUSAL_RE.search(answer) and "[" not in answer:
+    if not answer or REFUSAL_RE.search(answer) and not REF_RE.search(answer):
         return None
 
     sentences = v.split_sentences(answer)
-    v.check_citations(sentences, len(chunks))
+    v.check_citations(sentences, len(format_sources(chunks)))
     claims = [s for s in sentences if s.needs_cite]
     if not claims:
         return None
@@ -97,7 +99,7 @@ async def run_one(graph, q: dict, with_judge: bool) -> dict:
         answer=answer, urls=urls[:5], chunk_ids=[c["chunk_id"] for c in chunks],
         llm_calls=result.get("llm_calls", 0), safety_label=result.get("safety_label"),
         evidence_status=result.get("evidence_status"), question_type=result.get("question_type"),
-        refused=bool(REFUSAL_RE.search(answer)) and not re.search(r"\[\d+\]", answer),
+        refused=bool(REFUSAL_RE.search(answer)) and not REF_RE.search(answer),
     )
     if q["group"] == "H" and with_judge:
         row["judge"] = await judge_answer(answer, chunks)

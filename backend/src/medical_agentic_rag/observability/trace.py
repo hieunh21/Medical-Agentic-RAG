@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import inspect
 import json
 import os
 import time
@@ -38,7 +39,11 @@ def log_llm(
 
 
 def traced(name: str, fn: Callable) -> Callable:
-    """Bọc node LangGraph (sync hoặc async): ghi thời gian + vài trường quyết định nhẹ."""
+    """Bọc node LangGraph (sync hoặc async): ghi thời gian + vài trường quyết định nhẹ.
+
+    Giữ nguyên chữ ký của node: node nhận (state, config) thì wrapper cũng nhận config và
+    truyền xuống — LangGraph quyết định có truyền config dựa trên chữ ký này.
+    """
     def _log(state: Any, t0: float, result: Any) -> None:
         st = state if isinstance(state, dict) else {}
         out = result if isinstance(result, dict) else {}
@@ -52,7 +57,18 @@ def traced(name: str, fn: Callable) -> Callable:
                 row[key] = out[key]
         _write(row)
 
+    takes_config = "config" in inspect.signature(fn).parameters
+
     if asyncio.iscoroutinefunction(fn):
+        if takes_config:
+            @functools.wraps(fn)
+            async def awrapper_cfg(state, config):
+                t0 = time.perf_counter()
+                result = await fn(state, config)
+                _log(state, t0, result)
+                return result
+            return awrapper_cfg
+
         @functools.wraps(fn)
         async def awrapper(state):
             t0 = time.perf_counter()

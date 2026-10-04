@@ -38,7 +38,7 @@ def test_exhausted_khi_chi_con_luot_cho_generate():
 def test_grade_het_ngan_sach_thi_thoai_hoa_thay_vi_nem_loi():
     state = {
         "llm_calls": MAX - 1, "aspects": ["a"], "standalone_question": "q",
-        "reranked_chunks": [{"chunk_id": "x#00", "title": "t", "text": "t"}],
+        "reranked_chunks": [{"chunk_id": "x#00", "article_id": "x", "title": "t", "url": "u", "text": "t"}],
     }
     out = asyncio.run(grade_evidence(state))
     assert out["n_relevant"] == 1 and out["coverage"] == 0.0 and out["missing_aspects"] == ["a"]
@@ -52,7 +52,7 @@ def test_grade_llm_loi_thi_thoai_hoa_va_di_thang_toi_generate(monkeypatch):
     monkeypatch.setattr(grade_mod, "run_task", _boom)
     state = {
         "llm_calls": 0, "aspects": ["a"], "standalone_question": "q", "corrections": 0,
-        "reranked_chunks": [{"chunk_id": "x#00", "title": "t", "text": "t"}],
+        "reranked_chunks": [{"chunk_id": "x#00", "article_id": "x", "title": "t", "url": "u", "text": "t"}],
     }
     out = asyncio.run(grade_evidence(state))
     assert out["grade_failed"] is True
@@ -62,7 +62,8 @@ def test_grade_llm_loi_thi_thoai_hoa_va_di_thang_toi_generate(monkeypatch):
 def test_generate_llm_loi_thi_tra_thong_bao_kem_nguon(monkeypatch):
     monkeypatch.setattr(generate_mod, "run_task", _boom)
     chunk = {"chunk_id": "x#00", "article_id": "x", "title": "t", "url": "u", "text": "t"}
-    out = asyncio.run(generate_mod.generate_answer_node({"reranked_chunks": [chunk], "standalone_question": "q", "llm_calls": 0}))
+    out = asyncio.run(generate_mod.generate_answer_node(
+        {"reranked_chunks": [chunk], "standalone_question": "q", "llm_calls": 0}, {}))
     assert out["draft_answer"] == generate_mod.GENERATE_FAILED and out["generate_failed"] is True
     assert out["evidence_status"] == "insufficient" and out["sources"]
 

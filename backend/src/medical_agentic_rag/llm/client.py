@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 import time
-from typing import Any, Optional, TypeVar
+from typing import Any, Awaitable, Callable, Optional, TypeVar
 
 import httpx
 from google import genai
@@ -56,11 +56,33 @@ def get_client() -> genai.Client:
     return _client
 
 
+async def _stream_text(client, spec, contents, cfg, on_token) -> tuple[str, Any]:
+    """Stream text ra ngoài qua on_token, trả về (toàn văn, usage_metadata của mảnh cuối)."""
+    parts: list[str] = []
+    usage = None
+    stream = await client.aio.models.generate_content_stream(
+        model=MODEL_BY_TIER[spec.model_tier], contents=contents, config=cfg,
+    )
+    async for chunk in stream:
+        usage = getattr(chunk, "usage_metadata", None) or usage
+        piece = chunk.text or ""
+        if piece:
+            parts.append(piece)
+            await on_token(piece)
+    return "".join(parts), usage
+
+
 async def run_task(
     task: str, contents: Any, state: dict,
     schema: Optional[type[T]] = None, tools: Optional[list] = None,
+    on_token: Optional[Callable[[str], Awaitable[None]]] = None,
 ) -> T | str:
-    """tools != None (research_agent): trả về response gốc (caller đọc .function_calls)."""
+    """tools != None (research_agent): trả về response gốc (caller đọc .function_calls).
+
+    on_token != None: gọi generate_content_stream và await on_token(chunk) cho từng mảnh text,
+    vẫn trả về chuỗi đầy đủ. Chỉ dùng cho task sinh văn bản tự do (generate_answer) — không
+    dùng với schema vì JSON phải parse trọn vẹn.
+    """
     spec = TASKS[task]
     client = get_client()
     cfg = types.GenerateContentConfig(
@@ -79,14 +101,18 @@ async def run_task(
         budget.charge_llm(state, task)
         t0 = time.perf_counter()
         try:
-            resp = await client.aio.models.generate_content(
-                model=MODEL_BY_TIER[spec.model_tier], contents=contents, config=cfg,
-            )
-            if tools:
-                out = resp
+            if on_token is not None:
+                out, usage = await _stream_text(client, spec, contents, cfg, on_token)
+                resp = None
             else:
-                out = schema.model_validate_json(strip_code_fence(resp.text)) if schema else (resp.text or "")
-            usage = getattr(resp, "usage_metadata", None)
+                resp = await client.aio.models.generate_content(
+                    model=MODEL_BY_TIER[spec.model_tier], contents=contents, config=cfg,
+                )
+                if tools:
+                    out = resp
+                else:
+                    out = schema.model_validate_json(strip_code_fence(resp.text)) if schema else (resp.text or "")
+                usage = getattr(resp, "usage_metadata", None)
             trace.log_llm(
                 state, task, attempt, t0, ok=True,
                 tokens_in=getattr(usage, "prompt_token_count", None),

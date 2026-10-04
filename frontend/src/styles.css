@@ -1,0 +1,280 @@
+:root {
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --border: #e3e6ec;
+  --text: #16191f;
+  --muted: #666d7a;
+  --accent: #1f6f6b;
+  --accent-soft: #e6f2f1;
+  --user: #eef1f6;
+  --warn-bg: #fdf3e3;
+  --warn-border: #e8c893;
+  --warn-text: #7a5518;
+  --err: #a8302a;
+  --radius: 12px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14161a;
+    --surface: #1c1f25;
+    --border: #2c313a;
+    --text: #e8eaee;
+    --muted: #9aa2b1;
+    --accent: #6fcac4;
+    --accent-soft: #1d2b2a;
+    --user: #252932;
+    --warn-bg: #2e2619;
+    --warn-border: #5c4a29;
+    --warn-text: #e2bd7c;
+    --err: #ef8780;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.app {
+  max-width: 820px;
+  margin: 0 auto;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 0 16px;
+}
+
+/* ---------------------------------------------------------------- header */
+header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px 0 16px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: -0.01em;
+}
+
+.sub {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.ghost {
+  flex: none;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.ghost:hover { color: var(--text); border-color: var(--muted); }
+
+.banner {
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+  color: var(--warn-text);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+/* ---------------------------------------------------------------- messages */
+main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-bottom: 16px;
+}
+
+.empty { margin: 40px 0; }
+
+.hint { color: var(--muted); font-size: 14px; margin: 0 0 12px; }
+
+.examples { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.examples button {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.examples button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.examples button:disabled { opacity: 0.5; cursor: default; }
+
+.msg { display: flex; }
+.msg.user { justify-content: flex-end; }
+
+.msg.user .bubble {
+  background: var(--user);
+  border-radius: var(--radius) var(--radius) 4px var(--radius);
+  padding: 10px 14px;
+  max-width: 85%;
+  white-space: pre-wrap;
+}
+
+.msg.bot .bubble {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius) var(--radius) var(--radius) 4px;
+  padding: 16px 18px;
+  width: 100%;
+  min-width: 0;
+}
+
+.bubble p { margin: 0 0 10px; }
+.bubble p:last-child { margin-bottom: 0; }
+.bubble ul { margin: 0 0 10px; padding-left: 20px; }
+.bubble li { margin-bottom: 4px; }
+
+.steps { color: var(--muted); font-style: italic; }
+.provisional { color: var(--muted); font-size: 13px; font-style: italic; }
+.err { color: var(--err); margin: 0; }
+
+.note {
+  color: var(--warn-text);
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+/* nhãn trích dẫn [n] */
+.cite {
+  display: inline-block;
+  min-width: 18px;
+  margin: 0 1px;
+  padding: 0 5px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: none;
+  border-radius: 5px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+  vertical-align: 1px;
+  cursor: pointer;
+}
+
+.cite:hover { background: var(--accent); color: var(--surface); }
+
+/* ---------------------------------------------------------------- sources */
+.src-head {
+  margin: 16px 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.sources { margin: 0; padding-left: 20px; font-size: 14px; }
+.sources li { margin-bottom: 4px; border-radius: 4px; transition: background 0.3s; }
+.sources li.hit { background: var(--accent-soft); }
+.sources a { color: var(--accent); text-decoration: none; }
+.sources a:hover { text-decoration: underline; }
+.updated { color: var(--muted); font-size: 13px; }
+
+/* ---------------------------------------------------------------- pipeline panel */
+.pipeline { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px; }
+
+.pp-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pp-toggle:hover { color: var(--text); }
+
+.chev { display: inline-block; transition: transform 0.15s; font-size: 10px; }
+.chev.open { transform: rotate(90deg); }
+
+.pp-body { margin: 10px 0 0; font-size: 13px; color: var(--muted); }
+
+.pp-row { display: flex; gap: 10px; padding: 3px 0; }
+.pp-row dt { flex: 0 0 160px; color: var(--muted); }
+.pp-row dd { margin: 0; color: var(--text); }
+
+/* ---------------------------------------------------------------- composer */
+.composer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  background: var(--bg);
+  padding: 12px 0 10px;
+}
+
+.composer textarea {
+  flex: 1;
+  resize: none;
+  min-height: 46px;
+  max-height: 160px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.composer textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+.composer button {
+  flex: none;
+  height: 46px;
+  padding: 0 20px;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.composer button:disabled { opacity: 0.45; cursor: default; }
+
+footer {
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+  padding: 0 0 20px;
+}
+
+@media (max-width: 560px) {
+  .pp-row { flex-direction: column; gap: 0; }
+  .pp-row dt { flex: none; }
+  .msg.user .bubble { max-width: 100%; }
+}

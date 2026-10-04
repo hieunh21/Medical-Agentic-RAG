@@ -14,8 +14,12 @@ from medical_agentic_rag.graph.nodes import validate as validate_mod
 from medical_agentic_rag.llm.schemas import ClaimVerdict, ClaimVerdicts
 from medical_agentic_rag.safety.templates import HIGH_RISK_PREFIX
 
-CHUNKS = [{"chunk_id": "a#00", "text": "Zona do virus varicella-zoster tái hoạt động."},
-          {"chunk_id": "b#00", "text": "Tiêm vắc xin giúp phòng ngừa zona."}]
+CHUNKS = [
+    {"chunk_id": "a#00", "article_id": "a", "title": "Zona", "url": "u/a",
+     "text": "Zona do virus varicella-zoster tái hoạt động."},
+    {"chunk_id": "b#00", "article_id": "b", "title": "Vắc xin zona", "url": "u/b",
+     "text": "Tiêm vắc xin giúp phòng ngừa zona."},
+]
 
 
 def prepared(text, n=2, **kw):
@@ -138,3 +142,72 @@ def test_node_generate_failed_khong_kiem_tra(monkeypatch):
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
+
+
+# --------------------------------------------------------------------------- nhiều nguồn trong 1 cặp ngoặc
+def test_nhan_dang_tri_ch_dan_gop_nhieu_nguon():
+    s = prepared("Zona do virus varicella gây ra [1, 2]. Tiêm vắc xin giúp phòng ngừa [1,2].")
+    assert s[0].refs == [1, 2] and s[1].refs == [1, 2]
+    assert not s[0].verdict and not s[1].verdict  # KHÔNG bị coi là thiếu trích dẫn
+
+
+def test_gop_nhieu_nguon_loc_so_khong_co_that():
+    s = prepared("Zona do virus varicella-zoster gây ra bệnh [1, 9].")
+    assert s[0].refs == [1] and "[1]" in s[0].text and "9" not in s[0].text and not s[0].verdict
+
+
+def test_gop_nhieu_nguon_ma_khong_so_nao_hop_le_thi_unsupported():
+    s = prepared("Zona do virus varicella-zoster gây ra bệnh [8, 9].")
+    assert s[0].refs == [] and s[0].verdict == "unsupported"
+
+
+def test_khong_pha_cau_truc_khi_viet_lai_nhom():
+    s = prepared("Zona do virus varicella gây ra [2, 1].")
+    assert s[0].text == "Zona do virus varicella gây ra [2][1]."  # giữ thứ tự model viết
+
+
+# --------------------------------------------------------------------------- nguồn trùng / không trích
+DUP = [
+    {"chunk_id": "a#00", "article_id": "a", "title": "Zona", "url": "u/a", "text": "Đoạn 1 của bài A."},
+    {"chunk_id": "a#05", "article_id": "a", "title": "Zona", "url": "u/a", "text": "Đoạn 2 của bài A."},
+    {"chunk_id": "b#00", "article_id": "b", "title": "Vắc xin", "url": "u/b", "text": "Đoạn của bài B."},
+]
+
+
+def test_hai_doan_cung_bai_chi_thanh_mot_nguon():
+    from medical_agentic_rag.answer import format_context, format_sources
+
+    assert [s["n"] for s in format_sources(DUP)] == [1, 2]
+    assert [s["url"] for s in format_sources(DUP)] == ["u/a", "u/b"]  # không còn u/a hai lần
+    ctx = format_context(DUP)
+    assert "[1]" in ctx and "[2]" in ctx and "[3]" not in ctx
+    assert "Đoạn 1 của bài A." in ctx and "Đoạn 2 của bài A." in ctx  # cả 2 đoạn vẫn vào context
+
+
+def test_bo_nguon_khong_duoc_trich_va_danh_so_lai():
+    sources = [{"n": i, "title": f"Bài {i}", "url": f"u/{i}", "updated_date": None} for i in range(1, 6)]
+    s = prepared("Ý một lấy từ nguồn một [1]. Ý hai lấy từ nguồn năm [5].", n=5)
+    kept = v.renumber_citations(s, sources)
+    assert [x["n"] for x in kept] == [1, 2]
+    assert [x["url"] for x in kept] == ["u/1", "u/5"]        # giữ đúng 2 bài được trích
+    assert s[0].refs == [1] and s[1].refs == [2]             # [5] -> [2]
+    assert v.rebuild(s) == "Ý một lấy từ nguồn một [1]. Ý hai lấy từ nguồn năm [2]."
+
+
+def test_danh_so_lai_cho_tri_ch_dan_gop_nhieu_nguon():
+    sources = [{"n": i, "title": f"Bài {i}", "url": f"u/{i}", "updated_date": None} for i in range(1, 6)]
+    s = prepared("Ý này lấy từ hai nguồn khác nhau [2, 4].", n=5)
+    kept = v.renumber_citations(s, sources)
+    assert [x["url"] for x in kept] == ["u/2", "u/4"]
+    assert s[0].text == "Ý này lấy từ hai nguồn khác nhau [1][2]."
+
+
+def test_node_tra_ve_nguon_da_loc(monkeypatch):
+    monkeypatch.setattr(validate_mod, "run_task", _fake_verify({0: "supported"}))
+    state = {
+        "draft_answer": "Đoạn 1 của bài A nói điều này [1].", "reranked_chunks": DUP,
+        "llm_calls": 0, "regenerations": 0, "safety_label": "normal",
+    }
+    out = asyncio.run(validate_mod.validate_citations(state))
+    assert [s["url"] for s in out["sources"]] == ["u/a"]  # bài B không được trích -> không hiện
+    assert out["final_answer"] == "Đoạn 1 của bài A nói điều này [1]."

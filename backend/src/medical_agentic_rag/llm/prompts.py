@@ -6,7 +6,7 @@ from typing import List
 
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 
-from medical_agentic_rag.answer import format_context
+from medical_agentic_rag.answer import format_context, group_by_article
 
 GRADE_TEMPLATE = """Bạn chấm điểm evidence cho hệ thống hỏi đáp y khoa.
 Với MỖI chunk trong CONTEXT, xác định:
@@ -50,7 +50,7 @@ Nếu CÂU HỎI MỚI đã độc lập (không phụ thuộc lịch sử), gi�
 
 BÀI ĐANG ĐƯỢC NÓI TỚI: {active_titles}
 
-LỊCH SỬ (tối đa 3 lượt gần nhất):
+LỊCH SỬ (các lượt gần nhất):
 {history}
 
 CÂU HỎI MỚI: {question}
@@ -58,13 +58,17 @@ CÂU HỎI MỚI: {question}
 Trả về đúng schema JSON yêu cầu."""
 
 
+ANSWER_PREVIEW_CHARS = 300
+
+
 def _format_history(history: List[AnyMessage]) -> str:
+    """history đã được condense_question cắt theo settings.HISTORY_TURNS — không cắt lại ở đây."""
     lines = []
-    for m in history[-6:]:  # tối đa 3 lượt = 3 cặp người dùng/trợ lý
+    for m in history:
         if isinstance(m, HumanMessage):
             lines.append(f"Người dùng: {m.content}")
         elif isinstance(m, AIMessage):
-            content = str(m.content)[:300]
+            content = str(m.content)[:ANSWER_PREVIEW_CHARS]
             lines.append(f"Trợ lý: {content}")
     return "\n".join(lines) if lines else "(lượt đầu, chưa có lịch sử)"
 
@@ -149,8 +153,9 @@ NL = chr(10)
 
 def build_verify_claims_prompt(sentences: List[tuple[int, str, List[int]]], chunks: List[dict]) -> str:
     """sentences: (sentence_id, text, [n được trích])."""
-    cited = sorted({n for _, _, refs in sentences for n in refs})
-    evidence = NL.join(f"[{n}] {chunks[n - 1]['text']}" for n in cited)
+    groups = group_by_article(chunks)  # [n] trỏ tới 1 bài, có thể gồm nhiều đoạn
+    cited = [n for n in sorted({n for _, _, refs in sentences for n in refs}) if 1 <= n <= len(groups)]
+    evidence = NL.join(f"[{n}] " + NL.join(groups[n - 1]["texts"]) for n in cited)
     lines = []
     for sid, text, refs in sentences:
         refs_txt = ", ".join(f"[{n}]" for n in refs)

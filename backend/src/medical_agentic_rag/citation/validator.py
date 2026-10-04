@@ -8,7 +8,11 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-REF_RE = re.compile(r"\[(\d+)\]")
+# Một nhóm trích dẫn: "[1]" và cả "[1, 3]" / "[1,3]" — model hay gộp nhiều nguồn vào một cặp
+# ngoặc dù prompt yêu cầu dạng [n] (gặp ở ~7% câu trả lời). Chỉ khớp "[1]" thì các câu đó bị coi
+# là KHÔNG có trích dẫn -> unsupported -> validator xoá sạch một câu trả lời vốn đúng.
+REF_RE = re.compile(r"\[\s*\d+(?:\s*,\s*\d+)*\s*\]")
+REF_NUM_RE = re.compile(r"\d+")
 DOSE_RE = re.compile(r"\d+(?:[.,]\d+)?\s?(?:mg|ml|mcg|µg|viên)\b", re.IGNORECASE)
 # Câu khuyến cáo / từ chối chung — không phải khẳng định y khoa cần nguồn.
 NO_CITE_RE = re.compile(
@@ -53,10 +57,14 @@ def split_sentences(text: str) -> list[Sentence]:
 
 def check_citations(sentences: list[Sentence], n_chunks: int, restrict_dose: bool = False) -> None:
     """Bước 1: sửa tại chỗ. [n] lạ bị xoá; câu thiếu nguồn / chứa liều cá nhân bị đánh dấu unsupported."""
+    def keep_valid(m: re.Match) -> str:
+        """Giữ các số có thật trong context, viết lại thành [a][b]; không còn số nào thì xoá nhóm."""
+        nums = [int(x) for x in REF_NUM_RE.findall(m.group(0))]
+        return "".join(f"[{x}]" for x in dict.fromkeys(n for n in nums if 1 <= n <= n_chunks))
+
     for s in sentences:
-        valid = lambda m: m.group(0) if 1 <= int(m.group(1)) <= n_chunks else ""  # noqa: E731
-        s.text = re.sub(r"[ \t]{2,}", " ", REF_RE.sub(valid, s.text)).strip()
-        s.refs = sorted({int(n) for n in REF_RE.findall(s.text)})
+        s.text = re.sub(r"[ \t]{2,}", " ", REF_RE.sub(keep_valid, s.text)).strip()
+        s.refs = sorted({int(x) for g in REF_RE.findall(s.text) for x in REF_NUM_RE.findall(g)})
         s.needs_cite = _needs_citation(s.text)
         if s.needs_cite and not s.refs:
             s.verdict, s.reason = "unsupported", "không có trích dẫn"
@@ -73,6 +81,27 @@ def apply_verdicts(sentences: list[Sentence], verdicts: dict[int, tuple[str, str
     for s in sentences:
         if s.id in verdicts and not s.verdict:
             s.verdict, s.reason = verdicts[s.id]
+
+
+def _remap_group(match: re.Match, mapping: dict[int, int]) -> str:
+    nums = [mapping[int(x)] for x in REF_NUM_RE.findall(match.group(0)) if int(x) in mapping]
+    return "".join(f"[{x}]" for x in dict.fromkeys(nums))
+
+
+def renumber_citations(sentences: list[Sentence], sources: list[dict]) -> list[dict]:
+    """Bỏ nguồn không câu nào trích, đánh số lại 1..K và sửa [n] trong các câu được giữ.
+
+    Retrieval lấy tới FINAL_CONTEXT_K nguồn nhưng câu trả lời thường chỉ trích vài cái; hiện cả
+    nguồn không được trích làm người đọc tưởng câu trả lời dựa trên chúng — có khi lệch hẳn chủ
+    đề (vd. câu hỏi bong gân mà danh sách nguồn có bài về một bệnh lây qua đường tình dục).
+    Sửa tại chỗ `sentences`, trả về danh sách nguồn mới.
+    """
+    cited = sorted({n for s in sentences for n in s.refs if 1 <= n <= len(sources)})
+    mapping = {old: new for new, old in enumerate(cited, 1)}
+    for s in sentences:
+        s.text = REF_RE.sub(lambda m: _remap_group(m, mapping), s.text)
+        s.refs = sorted({mapping[n] for n in s.refs if n in mapping})
+    return [{**sources[old - 1], "n": new} for old, new in mapping.items()]
 
 
 def claim_counts(sentences: list[Sentence]) -> dict[str, int]:
