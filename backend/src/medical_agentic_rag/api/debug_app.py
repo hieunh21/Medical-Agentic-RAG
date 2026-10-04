@@ -22,6 +22,7 @@ from pydantic import BaseModel
 from medical_agentic_rag.config import settings
 from medical_agentic_rag.graph.build import compile_graph
 from medical_agentic_rag.graph.state import init_state
+from medical_agentic_rag.observability import trace
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -53,6 +54,7 @@ async def ask(req: AskReq) -> dict:
     t0 = time.perf_counter()
     result = await app.state.graph.ainvoke(state, config={"configurable": {"thread_id": thread_id}})
     elapsed_ms = round((time.perf_counter() - t0) * 1000, 1)
+    trace.log_request(result, elapsed_ms)
 
     chunks = result.get("reranked_chunks") or []
     return {
@@ -70,6 +72,8 @@ async def ask(req: AskReq) -> dict:
         "corrections": result.get("corrections", 0),
         "agent_tool_calls": result.get("agent_tool_calls", 0),
         "llm_calls": result.get("llm_calls", 0),
+        "safety_label": result.get("safety_label"),
+        "claims": result.get("claims") or {},
         "elapsed_ms": elapsed_ms,
         "context_chunks": [
             {

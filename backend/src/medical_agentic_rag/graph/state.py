@@ -1,11 +1,21 @@
 """State cho graph Phase 1+2+3 (mục 8.6). An toàn/citation để dành Phase 5."""
 from __future__ import annotations
 
-import operator
 from typing import Annotated, Optional, TypedDict
 
 from langchain_core.messages import AnyMessage, HumanMessage
 from langgraph.graph.message import add_messages
+
+
+def accumulate_results(old: Optional[list[dict]], new: Optional[list[dict]]) -> list[dict]:
+    """Reducer cho sub_results: nối kết quả các nhánh Send song song; `None` = xoá về rỗng.
+
+    Checkpointer giữ giá trị field giữa các lượt của cùng thread, nên init_state gửi None
+    ở đầu mỗi lượt để lượt sau không cộng dồn kết quả của lượt trước.
+    """
+    if new is None:
+        return []
+    return [*(old or []), *new]
 
 
 class State(TypedDict, total=False):
@@ -19,6 +29,9 @@ class State(TypedDict, total=False):
     standalone_question: str
     is_followup: bool
     question_type: str
+    safety_deferred: bool  # lớp 1 thấy từ khoá emergency nhưng câu không mang tính cá nhân -> chờ lớp 2
+    safety_unverified: bool  # lớp 2 hỏng (analyze_query thoái hoá) -> câu trả lời kèm khuyến cáo 115
+    emergency_topic: bool  # hỏi kiến thức về chủ đề cấp cứu (không dừng) -> chèn khuyến cáo gọi 115
     safety_label: str  # thu thập ở Phase 3, hành vi xử lý thật sự để Phase 5
     entities: list[str]
     aspects: list[str]
@@ -28,7 +41,7 @@ class State(TypedDict, total=False):
     # retrieval
     subqueries: list[str]
     sub_section_types: list[Optional[str]]
-    sub_results: Annotated[list[dict], operator.add]
+    sub_results: Annotated[list[dict], accumulate_results]
     retrieved_pool: dict[str, dict]  # chunk_id -> chunk payload, tích lũy qua các lượt sửa
     reranked_chunks: list[dict]      # context hiện tại, đã rerank theo câu hỏi gốc
     corrections: int
@@ -39,6 +52,13 @@ class State(TypedDict, total=False):
     n_relevant: int
     coverage: float
     missing_aspects: list[str]
+    claims: dict[str, int]           # supported/partial/unsupported từ citation_validator
+    draft_answer: str
+    generate_failed: bool
+    regenerate: bool                 # validator yêu cầu generate lại
+    regenerations: int
+    rejected_sentences: list[str]
+    coverage_trace: list[float]
     grade_failed: bool               # grader hết ngân sách / LLM lỗi -> bỏ qua vòng sửa
     evidence_status: str             # sufficient | partial | insufficient
 
@@ -71,6 +91,11 @@ def init_state(question: str, thread_id: Optional[str] = None, trace_id: Optiona
         "retrieved_pool": {},
         "corrections": 0,
         "agent_tool_calls": 0,
+        # field không có reducer sống qua các lượt của cùng thread -> reset mỗi lượt
+        "safety_label": "normal", "safety_deferred": False, "emergency_topic": False, "safety_unverified": False, "grade_failed": False, "generate_failed": False,
+        "regenerate": False, "regenerations": 0, "rejected_sentences": [], "draft_answer": "",
+        "coverage_trace": [], "claims": {},
+        "sub_results": None,  # sentinel cho accumulate_results: xoá kết quả subquery của lượt trước
         "llm_calls": 0,
         "trace_id": trace_id,
     }

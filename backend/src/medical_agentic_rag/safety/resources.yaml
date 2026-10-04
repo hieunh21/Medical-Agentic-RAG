@@ -1,0 +1,5 @@
+# Số liên hệ hiển thị trong phản hồi safety. CHỈ điền số đã được xác minh.
+emergency_number: "115"
+# Mỗi mục: {name: "Tên đường dây", phone: "số", hours: "giờ hoạt động (tuỳ chọn)"}.
+# Để trống thì phản hồi self_harm chỉ nhắc 115 và người thân / chuyên gia.
+hotlines: []

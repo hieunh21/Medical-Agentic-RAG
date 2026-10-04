@@ -63,7 +63,7 @@ def test_generate_llm_loi_thi_tra_thong_bao_kem_nguon(monkeypatch):
     monkeypatch.setattr(generate_mod, "run_task", _boom)
     chunk = {"chunk_id": "x#00", "article_id": "x", "title": "t", "url": "u", "text": "t"}
     out = asyncio.run(generate_mod.generate_answer_node({"reranked_chunks": [chunk], "standalone_question": "q", "llm_calls": 0}))
-    assert out["final_answer"] == generate_mod.GENERATE_FAILED
+    assert out["draft_answer"] == generate_mod.GENERATE_FAILED and out["generate_failed"] is True
     assert out["evidence_status"] == "insufficient" and out["sources"]
 
 

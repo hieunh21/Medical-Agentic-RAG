@@ -31,4 +31,5 @@ TASKS: dict[str, TaskSpec] = {
     "analyze_query": TaskSpec("fast", 0.0, 1024),
     "plan_subqueries": TaskSpec("fast", 0.0, 1024, thinking_budget=-1),
     "research_agent": TaskSpec("strong", 0.0, 1024),
+    "verify_claims": TaskSpec("judge", 0.0, 2048),
 }

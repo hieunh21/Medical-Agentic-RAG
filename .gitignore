@@ -11,6 +11,10 @@ output/
 # không phát hành lại (thiết kế mục 6.2). Giữ eval/testset/.gitkeep làm placeholder.
 eval/testset/*.jsonl
 
+# Chứa các cách diễn đạt ý định tự hại dùng làm input kiểm thử bộ phân loại safety —
+# không để trong repo công khai. Dựng lại từ eval/cases_safety.example.py.
+eval/cases_safety.py
+
 *.log
 
 # Tài liệu thiết kế nội bộ — chưa public trước khi bảo vệ đồ án

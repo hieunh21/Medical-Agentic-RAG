@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
+import time
 import uuid
 
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
@@ -16,13 +17,16 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from medical_agentic_rag.config import settings
 from medical_agentic_rag.graph.build import compile_graph
 from medical_agentic_rag.graph.state import init_state
+from medical_agentic_rag.observability import trace
 
 
 async def ask(question: str, thread_id: str) -> dict:
     async with AsyncSqliteSaver.from_conn_string(settings.CHECKPOINT_DB) as saver:
         graph = compile_graph(checkpointer=saver)
         state = init_state(question, thread_id=thread_id, trace_id=str(uuid.uuid4()))
+        t0 = time.perf_counter()
         result = await graph.ainvoke(state, config={"configurable": {"thread_id": thread_id}})
+        trace.log_request(result, round((time.perf_counter() - t0) * 1000, 1))
     return {
         "answer": result["final_answer"],
         "sources": result.get("sources") or [],
@@ -32,6 +36,8 @@ async def ask(question: str, thread_id: str) -> dict:
         "corrections": result.get("corrections", 0),
         "agent_tool_calls": result.get("agent_tool_calls", 0),
         "llm_calls": result.get("llm_calls", 0),
+        "safety_label": result.get("safety_label"),
+        "claims": result.get("claims") or {},
         "thread_id": thread_id,
     }
 

@@ -21,7 +21,7 @@ from typing import List
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "backend" / "src"))
 
-from medical_agentic_rag.graph.build import get_graph
+from medical_agentic_rag.graph.build import compile_graph as get_graph
 from medical_agentic_rag.graph.state import init_state
 from medical_agentic_rag.retrieval.hybrid import retrieve
 from medical_agentic_rag.retrieval.rerank import rerank_and_select

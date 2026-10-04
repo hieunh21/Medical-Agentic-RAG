@@ -5,6 +5,7 @@ from __future__ import annotations
 from medical_agentic_rag import budget
 from medical_agentic_rag.config import settings
 from medical_agentic_rag.graph.state import State
+from medical_agentic_rag.safety.rules import STOP_LABELS
 
 ROUTE_BY_QUESTION_TYPE = {
     "definition": "retrieve_definition",
@@ -20,7 +21,19 @@ ROUTE_BY_QUESTION_TYPE = {
 }
 
 
+def after_safety_rules(state: State) -> str:
+    if state.get("safety_label") in STOP_LABELS and not state.get("safety_deferred"):
+        return "safety_response"
+    return "condense_question"
+
+
+def after_validate(state: State) -> str:
+    return "generate_answer" if state.get("regenerate") else "end"
+
+
 def route_by_type(state: State) -> str:
+    if state.get("safety_label") in STOP_LABELS:  # lớp 2 (analyze_query) bắt ca rule bỏ sót
+        return "safety_response"
     route = ROUTE_BY_QUESTION_TYPE.get(state.get("question_type", ""), "hybrid_retrieve")
     if route == "research_agent" and not settings.AGENT_ENABLED:
         return "hybrid_retrieve"  # RESEARCH_AGENT_ENABLED=false -> fallback đường rẻ

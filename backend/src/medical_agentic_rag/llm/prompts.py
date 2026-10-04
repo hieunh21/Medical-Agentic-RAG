@@ -89,6 +89,11 @@ CÂU HỎI: {question}
 - safety_label: một trong "normal", "diagnosis_request" (xin chẩn đoán "tôi bị bệnh gì"),
   "medication_dosing" (hỏi liều thuốc cụ thể), "high_risk" (triệu chứng nguy hiểm),
   "emergency" (cấp cứu), "self_harm" (tự hại).
+- situation: "personal" nếu người hỏi hoặc người thân của họ đang / vừa gặp một tình huống cụ thể (kể cả
+  khi hỏi "có cần đi cấp cứu không"); "general" CHỈ khi là câu hỏi kiến thức chung, không gắn với tình huống
+  cụ thể của ai (vd "co giật là gì", "dấu hiệu nhận biết đột quỵ", "khi nào cần đi cấp cứu nói chung",
+  "chế độ ăn khi tăng huyết áp"). Chủ đề cấp cứu mà chỉ hỏi kiến thức chung thì safety_label là "normal"
+  hoặc "high_risk", KHÔNG phải "emergency". Không chắc thì chọn "personal".
 - entities: tên bệnh/triệu chứng/thuốc được nhắc tới.
 - aspects: khía cạnh người hỏi cần (vd "nguyên nhân", "triệu chứng", "khi nào đi khám",
   "chẩn đoán", "điều trị", "phòng ngừa", "biến chứng"). Nếu câu hỏi đơn giản, 1 khía cạnh là đủ.
@@ -121,3 +126,33 @@ def build_plan_subqueries_prompt(question: str, entities: List[str], aspects: Li
         question=question, entities=", ".join(entities) or "(không rõ)",
         aspects=", ".join(aspects) or "(không rõ)",
     )
+
+
+VERIFY_CLAIMS_TEMPLATE = """Kiểm tra từng CÂU trả lời dưới đây có được CHỨNG CỨ mà nó trích dẫn hỗ trợ hay không.
+- supported: chứng cứ nói rõ ý chính của câu.
+- partial: chứng cứ chỉ hỗ trợ một phần câu.
+- unsupported: chứng cứ không nói tới ý này, hoặc nói ngược lại.
+Chỉ dựa vào chứng cứ được đưa, không dùng kiến thức bên ngoài. Với mỗi câu, trả sentence_id khớp
+và reason ngắn gọn.
+
+CHỨNG CỨ:
+{evidence}
+
+CÁC CÂU:
+{sentences}
+
+Trả về đúng schema JSON yêu cầu."""
+
+
+NL = chr(10)
+
+
+def build_verify_claims_prompt(sentences: List[tuple[int, str, List[int]]], chunks: List[dict]) -> str:
+    """sentences: (sentence_id, text, [n được trích])."""
+    cited = sorted({n for _, _, refs in sentences for n in refs})
+    evidence = NL.join(f"[{n}] {chunks[n - 1]['text']}" for n in cited)
+    lines = []
+    for sid, text, refs in sentences:
+        refs_txt = ", ".join(f"[{n}]" for n in refs)
+        lines.append(f"#{sid} (trích {refs_txt}): {text}")
+    return VERIFY_CLAIMS_TEMPLATE.format(evidence=evidence, sentences=NL.join(lines))

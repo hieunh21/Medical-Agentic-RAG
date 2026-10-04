@@ -5,6 +5,7 @@ output có schema, retry, trừ ngân sách và ghi log.
 """
 from __future__ import annotations
 
+import re
 import time
 from typing import Any, Optional, TypeVar
 
@@ -26,8 +27,20 @@ _client: genai.Client | None = None
 MODEL_BY_TIER = {
     "fast": settings.LLM_MODEL_FAST,
     "strong": settings.LLM_MODEL_STRONG,
-    "judge": settings.LLM_MODEL_JUDGE,
+    "judge": settings.LLM_MODEL_JUDGE or settings.LLM_MODEL_STRONG,  # chưa cấu hình judge -> dùng strong
 }
+
+
+_FENCE_START = re.compile(r"^```[a-zA-Z]*\s*")
+_FENCE_END = re.compile(r"\s*```$")
+
+
+def strip_code_fence(text: str) -> str:
+    """Model đôi khi bọc JSON trong ```json ... ``` dù đã yêu cầu response_mime_type=application/json."""
+    text = (text or "").strip()
+    if text.startswith("```"):
+        text = _FENCE_END.sub("", _FENCE_START.sub("", text, count=1)).strip()
+    return text
 
 
 def get_client() -> genai.Client:
@@ -72,10 +85,15 @@ async def run_task(
             if tools:
                 out = resp
             else:
-                out = schema.model_validate_json(resp.text) if schema else (resp.text or "")
-            trace.log_llm(state, task, attempt, t0, ok=True)
+                out = schema.model_validate_json(strip_code_fence(resp.text)) if schema else (resp.text or "")
+            usage = getattr(resp, "usage_metadata", None)
+            trace.log_llm(
+                state, task, attempt, t0, ok=True,
+                tokens_in=getattr(usage, "prompt_token_count", None),
+                tokens_out=getattr(usage, "candidates_token_count", None),
+            )
             return out
         except (ValidationError, errors.APIError, httpx.TransportError) as exc:
             last_exc = exc
-            trace.log_llm(state, task, attempt, t0, ok=False, error=type(exc).__name__)
+            trace.log_llm(state, task, attempt, t0, ok=False, error=type(exc).__name__, detail=str(exc)[:400])
     raise LLMTaskFailed(f"{task}: {last_exc}")

@@ -27,26 +27,36 @@ async def retrieve_definition(state: State) -> dict:
     return {"retrieved_pool": pool, "reranked_chunks": chunks, "confident": confident}
 
 
-def _section_lookup_sync(state: State) -> tuple[dict, list[dict]]:
+def _section_lookup_sync(state: State, widen: bool = True) -> tuple[dict, list[dict]]:
+    """Ứng viên cho section_lookup: kết quả lọc theo bài đã khớp + (widen) kết quả không lọc.
+
+    find_article chỉ khớp mờ ra 1 bài, trong khi corpus có nhiều bài cùng một bệnh (vd. 4 bài
+    tăng huyết áp, 2 bài cúm mùa): khoá cứng vào 1 bài làm mất bài đúng khi nó là bài "anh em".
+    Gộp thêm ứng viên không lọc để reranker chọn giữa các bài. widen=False là hành vi cũ
+    (chỉ dùng cho eval/run_section_lookup_compare.py).
+    """
+    question = state["standalone_question"]
     entities = state.get("entities") or []
-    name = entities[0] if entities else state["standalone_question"]
+    name = entities[0] if entities else question
     match = find_article(name)
 
     target_types = state.get("target_section_types") or []
     section_type = target_types[0] if target_types else None
 
+    focused: list[dict] = []
     if match:
-        candidates = retrieve(state["standalone_question"], article_id=match["article_id"], section_type=section_type)
-        if not candidates and section_type:
-            candidates = retrieve(state["standalone_question"], article_id=match["article_id"])
-    else:
-        candidates = retrieve(state["standalone_question"])
+        focused = retrieve(question, article_id=match["article_id"], section_type=section_type)
+        if not focused and section_type:
+            focused = retrieve(question, article_id=match["article_id"])
+    broad = retrieve(question) if (widen or not match) else []
 
-    pool = {c["chunk_id"]: c for c in candidates}
-    return pool, rerank_and_select(state["standalone_question"], list(pool.values()))
+    pool = {c["chunk_id"]: c for c in focused}
+    for c in broad:
+        pool.setdefault(c["chunk_id"], c)
+    return pool, rerank_and_select(question, list(pool.values()))
 
 
 async def retrieve_section_lookup(state: State) -> dict:
-    """find_article (code, không LLM) -> hybrid lọc article_id + section_type; rỗng thì bỏ lọc."""
+    """find_article (code, không LLM) -> ứng viên lọc theo bài + ứng viên không lọc -> rerank."""
     pool, chunks = await asyncio.to_thread(_section_lookup_sync, state)
     return {"retrieved_pool": pool, "reranked_chunks": chunks}

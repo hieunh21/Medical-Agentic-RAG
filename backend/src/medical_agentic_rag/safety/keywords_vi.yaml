@@ -1,0 +1,67 @@
+# Lớp 1 — rule. Ưu tiên bắt nhầm hơn bỏ sót (thiết kế mục 10.1).
+# Viết có dấu; rules.py tự so khớp thêm bản bỏ dấu khi người dùng gõ không dấu.
+emergency:
+  - đau ngực dữ dội
+  - khó thở
+  - ngất
+  - ngất xỉu
+  - bất tỉnh
+  - co giật
+  - méo miệng
+  - yếu nửa người
+  - liệt nửa người
+  - nói ngọng đột ngột
+  - nôn ra máu
+  - sưng môi lưỡi
+  - ngộ độc
+self_harm:
+  - muốn chết
+  - tự tử
+  - tự sát
+  - tự làm hại bản thân
+  - không muốn sống nữa
+
+# Dấu hiệu người hỏi / người thân đang gặp tình huống cụ thể. Câu có từ khoá emergency VÀ có một trong
+# các từ này -> dừng ngay (lớp 1). Câu có từ khoá emergency nhưng KHÔNG có -> hoãn cho lớp 2 (LLM) quyết
+# định là hỏi kiến thức chung hay tình huống thật. Chỉ áp dụng cho emergency; self_harm luôn dừng.
+# Danh sách này đặt thiên về "coi là cá nhân": thiếu từ thì chỉ làm hoãn thêm, không làm bỏ sót.
+personal_markers:
+  - tôi
+  - mình
+  - em
+  - con
+  - bé
+  - cháu
+  - bố
+  - ba
+  - cha
+  - mẹ
+  - má
+  - ông
+  - bà
+  - chồng
+  - vợ
+  - anh
+  - chị
+  - người nhà
+  - người thân
+  - đang
+  - vừa
+  - lúc này
+  - bây giờ
+  - hiện tại
+  - hôm nay
+  - hôm qua
+  - sáng nay
+  - tối nay
+  - mấy hôm
+  - dạo này
+
+# Cụm chung chung chứa từ giống dấu hiệu cá nhân ("em" trong "trẻ em", "bà" trong "bà bầu"...): được xoá khỏi
+# câu trước khi tìm personal_markers. Câu "em bé nhà tôi..." vẫn là cá nhân nhờ "tôi" / "nhà tôi".
+generic_phrases:
+  - trẻ em
+  - bà bầu
+  - em bé
+  - ông bà
+  - con người

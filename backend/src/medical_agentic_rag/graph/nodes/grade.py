@@ -32,5 +32,6 @@ async def grade_evidence(state: State) -> dict:
     return {
         "n_relevant": len(relevant), "coverage": coverage, "missing_aspects": missing,
         "grade_failed": False,
+        "coverage_trace": [*(state.get("coverage_trace") or []), coverage],
         "llm_calls": state["llm_calls"],  # run_task() đã mutate state["llm_calls"] in-place
     }
