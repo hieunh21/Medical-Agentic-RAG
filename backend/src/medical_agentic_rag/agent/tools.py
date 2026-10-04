@@ -1,6 +1,8 @@
 """6 tool của research agent (mục 8.5) — code thường, agent chỉ được gọi qua allowlist."""
 from __future__ import annotations
 
+import asyncio
+
 from typing import Any, Optional
 
 from google.genai import types
@@ -137,6 +139,6 @@ async def execute_tool(name: str, args: dict[str, Any]) -> Any:
     if name not in ALLOWLIST or name not in DISPATCH:
         return {"error": f"tool '{name}' không nằm trong allowlist"}
     try:
-        return DISPATCH[name](**args)
+        return await asyncio.to_thread(DISPATCH[name], **args)
     except TypeError as exc:
         return {"error": f"tham số sai schema: {exc}"}

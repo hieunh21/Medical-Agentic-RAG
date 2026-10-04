@@ -91,7 +91,6 @@ def build_graph():
             "targeted_retrieve": "targeted_retrieve",
             "rewrite_query": "rewrite_query",
             "no_info_response": "no_info_response",
-            "external_fallback": "no_info_response",  # Phase 4 (PubMed) chưa có node riêng
         },
     )
     g.add_edge("targeted_retrieve", "grade_evidence")

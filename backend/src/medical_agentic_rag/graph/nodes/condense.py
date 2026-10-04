@@ -4,6 +4,7 @@ Bỏ qua lời gọi LLM nếu đây là lượt đầu (chưa có lịch sử).
 """
 from __future__ import annotations
 
+from medical_agentic_rag.budget import degrade_on_budget
 from medical_agentic_rag.graph.state import State
 from medical_agentic_rag.llm.client import run_task
 from medical_agentic_rag.llm.prompts import build_condense_prompt
@@ -13,6 +14,7 @@ from medical_agentic_rag.retrieval.article_index import get_titles
 HISTORY_TURNS = 3
 
 
+@degrade_on_budget(lambda s: {"standalone_question": s["question"], "is_followup": False})
 async def condense_question(state: State) -> dict:
     messages = state.get("messages") or []
     history = messages[:-1]  # bỏ câu hỏi mới nhất (chính nó) ra khỏi lịch sử

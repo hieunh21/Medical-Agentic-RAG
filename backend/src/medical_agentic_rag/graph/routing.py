@@ -37,9 +37,9 @@ def after_grade(state: State) -> str:
     if state["n_relevant"] == 0:
         if state["corrections"] < settings.MAX_CORRECTIONS:
             return "rewrite_query"
-        return "external_fallback" if settings.FALLBACK_ENABLED else "no_info_response"
+        return "no_info_response"
     if state["coverage"] >= settings.COVERAGE_THRESHOLD:
         return "generate_answer"
     if state["corrections"] < settings.MAX_CORRECTIONS:
         return "targeted_retrieve"
-    return "external_fallback" if settings.FALLBACK_ENABLED else "generate_answer"  # evidence_status = partial
+    return "generate_answer"  # evidence_status = partial

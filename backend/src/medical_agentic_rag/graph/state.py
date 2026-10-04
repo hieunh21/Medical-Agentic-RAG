@@ -1,4 +1,4 @@
-"""State cho graph Phase 1+2+3 (mục 8.6). An toàn/citation/nguồn ngoài để dành Phase 4+5."""
+"""State cho graph Phase 1+2+3 (mục 8.6). An toàn/citation để dành Phase 5."""
 from __future__ import annotations
 
 import operator

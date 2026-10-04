@@ -5,11 +5,13 @@ qua rerank -> grade -> generate như mọi route khác (xem graph/build.py).
 """
 from __future__ import annotations
 
+import asyncio
 import time
 
 from google.genai import types
 
 from ingestion.qdrant_store import get_chunks_by_ids, get_client
+from medical_agentic_rag.budget import BudgetExceeded
 from medical_agentic_rag.agent.tools import AGENT_TOOLS, execute_tool
 from medical_agentic_rag.config import settings
 from medical_agentic_rag.graph.state import State
@@ -64,7 +66,10 @@ async def research_agent(state: State) -> dict:
 
     empty_retries = 0
     while calls < settings.AGENT_MAX_TOOL_CALLS and (time.perf_counter() - t0) < settings.AGENT_TIMEOUT_S:
-        resp = await run_task("research_agent", contents, state, tools=AGENT_TOOLS)
+        try:
+            resp = await run_task("research_agent", contents, state, tools=AGENT_TOOLS)
+        except BudgetExceeded:
+            break  # hết ngân sách LLM: dừng, dùng evidence đã thấy (xem final_ids bên dưới)
         call = _first_function_call(resp)
 
         # Model thỉnh thoảng trả rỗng (không function_call, không text) dù còn ngân
@@ -95,7 +100,10 @@ async def research_agent(state: State) -> dict:
     # hết ngân sách mà chưa finish -> dùng toàn bộ chunk đã thấy.
     final_ids = [i for i in chosen_ids if i in seen_ids] or list(seen_ids)
     client = get_client()
-    chunks = get_chunks_by_ids(client, final_ids[: settings.AGENT_MAX_POOL]) if final_ids else []
+    chunks = (
+        await asyncio.to_thread(get_chunks_by_ids, client, final_ids[: settings.AGENT_MAX_POOL])
+        if final_ids else []
+    )
 
     return {
         "retrieved_pool": {c["chunk_id"]: c for c in chunks},

@@ -5,12 +5,15 @@ template cấp cứu...) để Phase 5 — xem mục 10.1.
 """
 from __future__ import annotations
 
+from medical_agentic_rag.budget import degrade_on_budget
 from medical_agentic_rag.graph.state import DEFAULT_ASPECT, State
 from medical_agentic_rag.llm.client import run_task
 from medical_agentic_rag.llm.prompts import build_analyze_prompt
 from medical_agentic_rag.llm.schemas import QueryAnalysis
 
 
+# Không phân loại được -> question_type rỗng -> route_by_type rơi về hybrid_retrieve.
+@degrade_on_budget(lambda s: {"question_type": "", "aspects": [DEFAULT_ASPECT]})
 async def analyze_query(state: State) -> dict:
     prompt = build_analyze_prompt(state["standalone_question"])
     analysis: QueryAnalysis = await run_task("analyze_query", prompt, state, schema=QueryAnalysis)

@@ -38,7 +38,6 @@ class Settings:
     # Corrective (Phase 2)
     MAX_CORRECTIONS = int(os.getenv("MAX_CORRECTIONS", "2"))
     COVERAGE_THRESHOLD = float(os.getenv("COVERAGE_THRESHOLD", "0.75"))
-    FALLBACK_ENABLED = os.getenv("PUBMED_FALLBACK_ENABLED", "false").lower() == "true"
 
     # Hội thoại + Agent (Phase 3)
     CHECKPOINT_DB = os.getenv("CHECKPOINT_DB", "data/sessions.sqlite")

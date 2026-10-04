@@ -6,6 +6,9 @@ câu hỏi + khía cạnh là đủ dùng.
 """
 from __future__ import annotations
 
+import asyncio
+
+from medical_agentic_rag.budget import degrade_on_budget
 from medical_agentic_rag.graph.state import State
 from medical_agentic_rag.llm.client import run_task
 from medical_agentic_rag.llm.prompts import build_rewrite_prompt
@@ -24,15 +27,18 @@ ASPECT_TO_SECTION_TYPE = {
 }
 
 
-async def targeted_retrieve(state: State) -> dict:
+def _targeted_retrieve_sync(state: State) -> tuple[dict, list[dict]]:
     pool = dict(state["retrieved_pool"])
     for aspect in state["missing_aspects"]:
         query = f"{state['standalone_question']} {aspect}"
         section_type = ASPECT_TO_SECTION_TYPE.get(aspect)
         for c in retrieve(query, section_type=section_type):
             pool.setdefault(c["chunk_id"], c)
+    return pool, rerank_and_select(state["standalone_question"], list(pool.values()))
 
-    chunks = rerank_and_select(state["standalone_question"], list(pool.values()))
+
+async def targeted_retrieve(state: State) -> dict:
+    pool, chunks = await asyncio.to_thread(_targeted_retrieve_sync, state)
     return {
         "retrieved_pool": pool,
         "reranked_chunks": chunks,
@@ -40,18 +46,23 @@ async def targeted_retrieve(state: State) -> dict:
     }
 
 
-async def rewrite_query(state: State) -> dict:
-    prompt = build_rewrite_prompt(state["standalone_question"])
-    rewrites: Rewrites = await run_task("rewrite_query", prompt, state, schema=Rewrites)
-
+def _rewrite_retrieve_sync(state: State, queries: list[str]) -> tuple[dict, list[dict]]:
     pool: dict[str, dict] = {}
-    for q in rewrites.queries[:3]:
+    for q in queries[:3]:
         for c in retrieve(q):
             pool.setdefault(c["chunk_id"], c)
     if not pool:  # không sinh được truy vấn nào hữu ích — giữ pool cũ thay vì xoá sạch
         pool = dict(state["retrieved_pool"])
+    return pool, rerank_and_select(state["standalone_question"], list(pool.values()))
 
-    chunks = rerank_and_select(state["standalone_question"], list(pool.values()))
+
+# Không viết lại được: giữ nguyên evidence hiện có, vẫn tính 1 lượt sửa để vòng lặp kết thúc.
+@degrade_on_budget(lambda s: {"corrections": s["corrections"] + 1})
+async def rewrite_query(state: State) -> dict:
+    prompt = build_rewrite_prompt(state["standalone_question"])
+    rewrites: Rewrites = await run_task("rewrite_query", prompt, state, schema=Rewrites)
+
+    pool, chunks = await asyncio.to_thread(_rewrite_retrieve_sync, state, rewrites.queries)
     return {
         "retrieved_pool": pool,
         "reranked_chunks": chunks,

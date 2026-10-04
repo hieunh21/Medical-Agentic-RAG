@@ -6,8 +6,11 @@ toàn bộ theo câu hỏi gốc.
 """
 from __future__ import annotations
 
+import asyncio
+
 from langgraph.types import Send
 
+from medical_agentic_rag.budget import degrade_on_budget
 from medical_agentic_rag.graph.state import State
 from medical_agentic_rag.llm.client import run_task
 from medical_agentic_rag.llm.prompts import build_plan_subqueries_prompt
@@ -19,6 +22,7 @@ MAX_SUBQUERIES = 4
 MAX_CHUNKS_PER_SUBQUERY = 3
 
 
+@degrade_on_budget(lambda s: {"subqueries": [s["standalone_question"]], "sub_section_types": [None]})
 async def plan_subqueries(state: State) -> dict:
     prompt = build_plan_subqueries_prompt(
         state["standalone_question"], state.get("entities") or [], state.get("aspects") or [],
@@ -48,7 +52,7 @@ def fan_out(state: State) -> list[Send]:
 async def retrieve_sub(payload: dict) -> dict:
     query = payload["query"]
     section_type = payload.get("section_type")
-    candidates = retrieve(query, section_type=section_type)
+    candidates = await asyncio.to_thread(retrieve, query, section_type=section_type)
     tagged = [{**c, "_subquery": query} for c in candidates[:10]]
     return {"sub_results": tagged}
 
@@ -68,5 +72,5 @@ async def merge_evidence(state: State) -> dict:
 
     # rerank CÓ đảm bảo mỗi subquery giữ ít nhất 1 chunk — tránh 1 bên bị đè mất
     # hoàn toàn khi so sánh 2 thực thể (xem phát hiện ở eval/run_routing_compare.py)
-    chunks = rerank_balanced_by_group(state["standalone_question"], capped)
+    chunks = await asyncio.to_thread(rerank_balanced_by_group, state["standalone_question"], capped)
     return {"retrieved_pool": pool, "reranked_chunks": chunks}

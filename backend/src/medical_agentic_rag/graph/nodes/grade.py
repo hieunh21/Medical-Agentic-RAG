@@ -1,12 +1,18 @@
 """Node: grade_evidence — LLM chấm từng chunk có/không, code tính coverage (mục 7.2)."""
 from __future__ import annotations
 
+from medical_agentic_rag.budget import degrade_on_budget
 from medical_agentic_rag.graph.state import State
 from medical_agentic_rag.llm.client import run_task
 from medical_agentic_rag.llm.prompts import build_grade_prompt
 from medical_agentic_rag.llm.schemas import EvidenceGrade
 
 
+# Không chấm được: coi mọi chunk là liên quan nhưng coverage 0 -> after_grade thấy hết
+# ngân sách sẽ trả lời partial thay vì no_info.
+@degrade_on_budget(lambda s: {
+    "n_relevant": len(s["reranked_chunks"]), "coverage": 0.0, "missing_aspects": list(s["aspects"]),
+})
 async def grade_evidence(state: State) -> dict:
     chunks = state["reranked_chunks"]
     aspects = state["aspects"]

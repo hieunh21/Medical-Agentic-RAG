@@ -5,6 +5,8 @@ không cần node riêng — xem routing.py để biết cạnh nối.
 """
 from __future__ import annotations
 
+import asyncio
+
 from medical_agentic_rag.config import settings
 from medical_agentic_rag.graph.state import State
 from medical_agentic_rag.retrieval.article_index import find_article
@@ -14,9 +16,9 @@ from medical_agentic_rag.retrieval.rerank import rerank_and_select
 
 async def retrieve_definition(state: State) -> dict:
     """Fast path: hybrid -> rerank; top-1 đủ tự tin thì đánh dấu để bỏ qua grader."""
-    candidates = retrieve(state["standalone_question"])
+    candidates = await asyncio.to_thread(retrieve, state["standalone_question"])
     pool = {c["chunk_id"]: c for c in candidates}
-    chunks = rerank_and_select(state["standalone_question"], list(pool.values()))
+    chunks = await asyncio.to_thread(rerank_and_select, state["standalone_question"], list(pool.values()))
 
     confident = bool(
         chunks and settings.RERANK_CONFIDENT_SCORE is not None
@@ -25,8 +27,7 @@ async def retrieve_definition(state: State) -> dict:
     return {"retrieved_pool": pool, "reranked_chunks": chunks, "confident": confident}
 
 
-async def retrieve_section_lookup(state: State) -> dict:
-    """find_article (code, không LLM) -> hybrid lọc article_id + section_type; rỗng thì bỏ lọc."""
+def _section_lookup_sync(state: State) -> tuple[dict, list[dict]]:
     entities = state.get("entities") or []
     name = entities[0] if entities else state["standalone_question"]
     match = find_article(name)
@@ -42,5 +43,10 @@ async def retrieve_section_lookup(state: State) -> dict:
         candidates = retrieve(state["standalone_question"])
 
     pool = {c["chunk_id"]: c for c in candidates}
-    chunks = rerank_and_select(state["standalone_question"], list(pool.values()))
+    return pool, rerank_and_select(state["standalone_question"], list(pool.values()))
+
+
+async def retrieve_section_lookup(state: State) -> dict:
+    """find_article (code, không LLM) -> hybrid lọc article_id + section_type; rỗng thì bỏ lọc."""
+    pool, chunks = await asyncio.to_thread(_section_lookup_sync, state)
     return {"retrieved_pool": pool, "reranked_chunks": chunks}
