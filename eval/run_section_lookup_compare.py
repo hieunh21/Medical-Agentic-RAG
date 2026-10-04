@@ -25,7 +25,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "backend" / "src"))
 
-from eval.run_ablation import fmt_rate  # noqa: E402
+from eval.metrics import fmt_rate  # noqa: E402
 from medical_agentic_rag.graph.nodes.analyze import analyze_query  # noqa: E402
 from medical_agentic_rag.graph.nodes.route_retrieve import _section_lookup_sync  # noqa: E402
 

@@ -6,8 +6,9 @@ Chạy hệ thống đầy đủ (Features() mặc định) trên 3 nhóm và ch
   O  ngoài phạm vi      -> có nói "chưa có thông tin" đúng lúc không
   S  safety             -> có bắt được ca cấp cứu / tự hại không, có dừng nhầm không
 
-KHÔNG chạy nhóm R ở đây: R dùng để đo retrieval, mà eval/run_retrieval.py đo được việc đó
-với 0 lời gọi LLM. Cho R chạy qua cả bước sinh câu trả lời chỉ tốn tiền.
+Nhóm R không nằm trong bảng điểm chính: R dùng để đo retrieval, cho nó chạy qua cả bước sinh
+câu trả lời chỉ tốn tiền. Muốn đo retrieval của hệ thống trên toàn bộ R thì dùng `--retrieval`:
+graph dừng ngay trước generate (~2 lời gọi/câu thay vì ~4).
 
 Mọi metric đều so với gold bằng code, trừ 2 dòng dùng LLM-judge (faithfulness, trích dẫn đúng
 nguồn) — chưa hiệu chuẩn bằng người nên là chỉ số tham khảo. Tỉ lệ kèm khoảng tin cậy Wilson 95%.
@@ -16,8 +17,9 @@ Kết quả từng câu cache ở data/eval/system.jsonl: chạy lại chỉ ch�
 --report-only dựng lại bảng mà không tốn lời gọi nào.
 
 Usage (cần Qdrant, model server :8001, LLM key):
-    python -m eval.run_eval                     # split test (88 câu)
+    python -m eval.run_eval                     # bảng điểm, split test (88 câu)
     python -m eval.run_eval --split dev         # rẻ hơn (56 câu)
+    python -m eval.run_eval --retrieval         # đo retrieval trên 234 câu R, không sinh câu trả lời
     python -m eval.run_eval --report-only
 """
 from __future__ import annotations
@@ -32,21 +34,24 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "backend" / "src"))
 
-from eval.run_ablation import (  # noqa: E402  (đặt cấu hình judge khi import)
-    TIERS, fmt_rate, norm, p95, run_one,
-)
+from eval.harness import TIERS, run_one  # noqa: E402  (import cũng đăng ký task eval_judge)
+from eval.metrics import fmt_rate, p95  # noqa: E402
 from medical_agentic_rag.graph.build import Features, compile_graph  # noqa: E402
-from medical_agentic_rag.safety.rules import STOP_LABELS  # noqa: E402
+from medical_agentic_rag.safety.rules import STOP_LABELS, strip_accents as norm  # noqa: E402
 
 TESTSET = Path("eval/testset")
 OUT_DIR = Path("data/eval")
-CACHE = OUT_DIR / "system.jsonl"
-GROUPS = [("h_full.jsonl", "H"), ("o_full.jsonl", "O"), ("s_full.jsonl", "S")]
+SCORECARD_GROUPS = [("h_full.jsonl", "H"), ("o_full.jsonl", "O"), ("s_full.jsonl", "S")]
+RETRIEVAL_GROUPS = [("r_full.jsonl", "R")]
 
 
-def load_questions(split: str) -> list[dict]:
+def cache_path(retrieval: bool) -> Path:
+    return OUT_DIR / ("retrieval.jsonl" if retrieval else "system.jsonl")
+
+
+def load_questions(split: str, retrieval: bool = False) -> list[dict]:
     rows = []
-    for name, group in GROUPS:
+    for name, group in (RETRIEVAL_GROUPS if retrieval else SCORECARD_GROUPS):
         path = TESTSET / name
         if not path.exists():
             continue
@@ -58,11 +63,12 @@ def load_questions(split: str) -> list[dict]:
     return rows
 
 
-async def run(questions: list[dict], concurrency: int) -> None:
+async def run(questions: list[dict], concurrency: int, retrieval: bool) -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
+    cache = cache_path(retrieval)
     done = set()
-    if CACHE.exists():
-        for line in open(CACHE, encoding="utf-8"):
+    if cache.exists():
+        for line in open(cache, encoding="utf-8"):
             if line.strip():
                 r = json.loads(line)
                 if "error" not in r:
@@ -72,15 +78,15 @@ async def run(questions: list[dict], concurrency: int) -> None:
     if not todo:
         return
 
-    graph = compile_graph(features=Features())
+    graph = compile_graph(features=Features(generate=not retrieval))
     sem = asyncio.Semaphore(concurrency)
     finished = 0
 
     async def worker(q: dict) -> None:
         nonlocal finished
         async with sem:
-            row = await run_one(graph, q, with_judge=True)
-        with open(CACHE, "a", encoding="utf-8") as f:
+            row = await run_one(graph, q, with_judge=not retrieval)
+        with open(cache, "a", encoding="utf-8") as f:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
         finished += 1
         if finished % 10 == 0 or finished == len(todo):
@@ -92,8 +98,9 @@ async def run(questions: list[dict], concurrency: int) -> None:
 def score(questions: list[dict]) -> str:
     gold = {q["id"]: q for q in questions}
     rows = {}
-    if CACHE.exists():
-        for line in open(CACHE, encoding="utf-8"):
+    cache = cache_path(False)
+    if cache.exists():
+        for line in open(cache, encoding="utf-8"):
             if line.strip():
                 r = json.loads(line)
                 if r["id"] in gold:
@@ -205,9 +212,51 @@ def score(questions: list[dict]) -> str:
     out.append("\n### Đã đo riêng, không chạy lại ở đây\n")
     out.append("| Hạng mục | Kết quả | Script |")
     out.append("|---|---|---|")
-    out.append("| Retrieval, 234 câu R | Article@5 0.93, chunk-hit 0.79 | `run_ablation --retrieval-only` |")
+    out.append("| Retrieval hệ thống, 234 câu R | xem `data/eval/report_retrieval.md` | `run_eval --retrieval` |")
     out.append("| Routing accuracy, 106 câu | 0.858 | `run_routing_accuracy` |")
     out.append("| Dense/sparse/hybrid/rerank theo mức khó | xem log | `run_retrieval` |")
+    return "\n".join(out)
+
+
+def score_retrieval(questions: list[dict]) -> str:
+    """Bảng retrieval cho nhóm R: Article@5 + chunk-hit, tách theo mức khó.
+
+    Câu bị safety dừng không có context nên luôn tính là trượt; cột cuối bỏ chúng ra để thấy
+    retrieval thuần, vì nhóm R do LLM sinh có lẫn câu mô tả tình huống cấp cứu thật.
+    """
+    gold = {q["id"]: q for q in questions}
+    cache = cache_path(True)
+    rows = []
+    if cache.exists():
+        for line in open(cache, encoding="utf-8"):
+            if line.strip():
+                r = json.loads(line)
+                if r["id"] in gold and "error" not in r:
+                    rows.append(r)
+
+    def article5(rs: list[dict]) -> str:
+        return fmt_rate(sum(any(u in gold[r["id"]]["gold_urls"] for u in r["urls"]) for r in rs), len(rs)) if rs else "—"
+
+    stopped = [r for r in rows if r["safety_label"] in STOP_LABELS]
+    went = [r for r in rows if r["safety_label"] not in STOP_LABELS]
+    calls = [r["llm_calls"] for r in rows]
+    out = [
+        f"## Retrieval nhóm R — {len(rows)} câu, không sinh câu trả lời\n",
+        "Tỉ lệ kèm khoảng tin cậy Wilson 95%. Context cuối = các chunk sau rerank (tối đa 5).\n",
+        "| Hạng mục | Kết quả |",
+        "|---|---|",
+        f"| Article@5 | {article5(rows)} |",
+        f"| chunk-hit (đúng chunk gold) | "
+        f"{fmt_rate(sum(gold[r['id']]['gold_chunk_id'] in r['chunk_ids'] for r in rows), len(rows))} |",
+        f"| Bị safety dừng | {len(stopped)}/{len(rows)} |",
+        f"| Article@5 (bỏ câu bị dừng) | {article5(went)} |",
+        f"| Chi phí | {sum(calls) / len(calls):.1f} lời gọi LLM/câu |" if calls else "| Chi phí | — |",
+        f"| Độ trễ P95 | {p95([r['latency_ms'] / 1000 for r in rows]):.1f}s |" if rows else "| Độ trễ P95 | — |",
+        "\n### Theo độ khó (Article@5)\n",
+        "| easy | medium | hard |",
+        "|---|---|---|",
+        "| " + " | ".join(article5([r for r in rows if gold[r["id"]]["difficulty"] == t]) for t in TIERS) + " |",
+    ]
     return "\n".join(out)
 
 
@@ -217,9 +266,11 @@ def main() -> int:
     ap.add_argument("--concurrency", type=int, default=4)
     ap.add_argument("--limit", type=int, help="chỉ lấy N câu đầu mỗi nhóm (chạy thử)")
     ap.add_argument("--report-only", action="store_true")
+    ap.add_argument("--retrieval", action="store_true",
+                    help="đo retrieval trên nhóm R (graph dừng trước generate) thay vì dựng bảng điểm")
     args = ap.parse_args()
 
-    questions = load_questions(args.split)
+    questions = load_questions(args.split, args.retrieval)
     if args.limit:
         seen: dict[str, int] = defaultdict(int)
         kept = []
@@ -230,12 +281,13 @@ def main() -> int:
         questions = kept
 
     if not args.report_only:
-        asyncio.run(run(questions, args.concurrency))
-    report = score(questions)
+        asyncio.run(run(questions, args.concurrency, args.retrieval))
+    report = score_retrieval(questions) if args.retrieval else score(questions)
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    (OUT_DIR / "report.md").write_text(report, encoding="utf-8")
+    name = "report_retrieval.md" if args.retrieval else "report.md"
+    (OUT_DIR / name).write_text(report, encoding="utf-8")
     print("\n" + report)
-    print(f"\n(đã lưu {OUT_DIR / 'report.md'})")
+    print(f"\n(đã lưu {OUT_DIR / name})")
     return 0
 
 
