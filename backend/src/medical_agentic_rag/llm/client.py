@@ -15,6 +15,7 @@ from pydantic import BaseModel, ValidationError
 
 from medical_agentic_rag import budget
 from medical_agentic_rag.config import settings
+from medical_agentic_rag.errors import LLMTaskFailed
 from medical_agentic_rag.llm.tasks import TASKS
 from medical_agentic_rag.observability import trace
 
@@ -27,10 +28,6 @@ MODEL_BY_TIER = {
     "strong": settings.LLM_MODEL_STRONG,
     "judge": settings.LLM_MODEL_JUDGE,
 }
-
-
-class LLMTaskFailed(RuntimeError):
-    pass
 
 
 def get_client() -> genai.Client:

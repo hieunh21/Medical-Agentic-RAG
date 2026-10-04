@@ -5,9 +5,11 @@ from langchain_core.messages import AIMessage
 
 from medical_agentic_rag.answer import build_prompt, format_sources
 from medical_agentic_rag.config import settings
+from medical_agentic_rag.errors import LLMTaskFailed
 from medical_agentic_rag.graph.state import State
 from medical_agentic_rag.llm.client import run_task
 
+GENERATE_FAILED = "Hệ thống tạm thời chưa tạo được câu trả lời. Bạn có thể tham khảo các bài viết liên quan bên dưới hoặc thử lại sau."
 NO_INFO = "YouMed hiện chưa có bài viết về vấn đề này. Bạn nên hỏi ý kiến bác sĩ để được tư vấn chính xác."
 
 
@@ -18,7 +20,11 @@ async def generate_answer_node(state: State) -> dict:
         state["standalone_question"], chunks,
         evidence_status=status, question_type=state.get("question_type"),
     )
-    answer = await run_task("generate_answer", prompt, state)
+    try:
+        answer = await run_task("generate_answer", prompt, state)
+    except LLMTaskFailed:
+        answer = GENERATE_FAILED
+        status = "insufficient"
     return {
         "final_answer": answer,
         "sources": format_sources(chunks),

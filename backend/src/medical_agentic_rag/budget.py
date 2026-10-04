@@ -2,7 +2,7 @@
 
 Lời gọi cuối cùng (generate_answer) luôn được chừa chỗ: các task khác chỉ được dùng
 tối đa MAX-1 lượt, nên khi ngân sách cạn vẫn còn 1 lượt để viết câu trả lời từ evidence
-đã có. Node nào có thể chạm trần thì bọc `degrade_on_budget` để thoái hoá êm thay vì
+đã có. Node nào có thể chạm trần hoặc gặp LLM lỗi thì bọc `degrade_on_llm_error` để thoái hoá êm thay vì
 làm sập cả request.
 """
 from __future__ import annotations
@@ -11,6 +11,7 @@ import functools
 from typing import Awaitable, Callable
 
 from medical_agentic_rag.config import settings
+from medical_agentic_rag.errors import LLMTaskFailed
 
 FINAL_TASK = "generate_answer"
 
@@ -35,14 +36,15 @@ def exhausted(state: dict) -> bool:
     return state.get("llm_calls", 0) >= settings.MAX_LLM_CALLS_PER_REQUEST - 1
 
 
-def degrade_on_budget(fallback: Callable[[dict], dict]):
-    """Bọc node async: hết ngân sách thì trả `fallback(state)` thay vì ném BudgetExceeded."""
+def degrade_on_llm_error(fallback: Callable[[dict], dict]):
+    """Bọc node async: hết ngân sách hoặc LLM lỗi (LLMTaskFailed) thì trả `fallback(state)`
+    thay vì làm sập request."""
     def deco(node: Callable[[dict], Awaitable[dict]]):
         @functools.wraps(node)
         async def wrapper(state: dict) -> dict:
             try:
                 return await node(state)
-            except BudgetExceeded:
+            except (BudgetExceeded, LLMTaskFailed):
                 return {**fallback(state), "llm_calls": state.get("llm_calls", 0)}
         return wrapper
     return deco

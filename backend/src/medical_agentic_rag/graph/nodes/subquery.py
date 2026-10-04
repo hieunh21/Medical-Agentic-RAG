@@ -10,7 +10,7 @@ import asyncio
 
 from langgraph.types import Send
 
-from medical_agentic_rag.budget import degrade_on_budget
+from medical_agentic_rag.budget import degrade_on_llm_error
 from medical_agentic_rag.graph.state import State
 from medical_agentic_rag.llm.client import run_task
 from medical_agentic_rag.llm.prompts import build_plan_subqueries_prompt
@@ -22,7 +22,7 @@ MAX_SUBQUERIES = 4
 MAX_CHUNKS_PER_SUBQUERY = 3
 
 
-@degrade_on_budget(lambda s: {"subqueries": [s["standalone_question"]], "sub_section_types": [None]})
+@degrade_on_llm_error(lambda s: {"subqueries": [s["standalone_question"]], "sub_section_types": [None]})
 async def plan_subqueries(state: State) -> dict:
     prompt = build_plan_subqueries_prompt(
         state["standalone_question"], state.get("entities") or [], state.get("aspects") or [],

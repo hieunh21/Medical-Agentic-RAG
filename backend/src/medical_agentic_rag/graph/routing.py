@@ -34,6 +34,8 @@ def after_definition_retrieve(state: State) -> str:
 def after_grade(state: State) -> str:
     if budget.exhausted(state):
         return "generate_answer" if state["n_relevant"] > 0 else "no_info_response"
+    if state.get("grade_failed") and state["n_relevant"] > 0:
+        return "generate_answer"
     if state["n_relevant"] == 0:
         if state["corrections"] < settings.MAX_CORRECTIONS:
             return "rewrite_query"

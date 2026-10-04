@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 
-from medical_agentic_rag.budget import degrade_on_budget
+from medical_agentic_rag.budget import degrade_on_llm_error
 from medical_agentic_rag.graph.state import State
 from medical_agentic_rag.llm.client import run_task
 from medical_agentic_rag.llm.prompts import build_rewrite_prompt
@@ -57,7 +57,7 @@ def _rewrite_retrieve_sync(state: State, queries: list[str]) -> tuple[dict, list
 
 
 # Không viết lại được: giữ nguyên evidence hiện có, vẫn tính 1 lượt sửa để vòng lặp kết thúc.
-@degrade_on_budget(lambda s: {"corrections": s["corrections"] + 1})
+@degrade_on_llm_error(lambda s: {"corrections": s["corrections"] + 1})
 async def rewrite_query(state: State) -> dict:
     prompt = build_rewrite_prompt(state["standalone_question"])
     rewrites: Rewrites = await run_task("rewrite_query", prompt, state, schema=Rewrites)

@@ -12,6 +12,7 @@ from google.genai import types
 
 from ingestion.qdrant_store import get_chunks_by_ids, get_client
 from medical_agentic_rag.budget import BudgetExceeded
+from medical_agentic_rag.errors import LLMTaskFailed
 from medical_agentic_rag.agent.tools import AGENT_TOOLS, execute_tool
 from medical_agentic_rag.config import settings
 from medical_agentic_rag.graph.state import State
@@ -68,8 +69,8 @@ async def research_agent(state: State) -> dict:
     while calls < settings.AGENT_MAX_TOOL_CALLS and (time.perf_counter() - t0) < settings.AGENT_TIMEOUT_S:
         try:
             resp = await run_task("research_agent", contents, state, tools=AGENT_TOOLS)
-        except BudgetExceeded:
-            break  # hết ngân sách LLM: dừng, dùng evidence đã thấy (xem final_ids bên dưới)
+        except (BudgetExceeded, LLMTaskFailed):
+            break  # hết ngân sách / LLM lỗi: dừng, dùng evidence đã thấy (xem final_ids bên dưới)
         call = _first_function_call(resp)
 
         # Model thỉnh thoảng trả rỗng (không function_call, không text) dù còn ngân

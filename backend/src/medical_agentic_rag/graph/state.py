@@ -39,6 +39,7 @@ class State(TypedDict, total=False):
     n_relevant: int
     coverage: float
     missing_aspects: list[str]
+    grade_failed: bool               # grader hết ngân sách / LLM lỗi -> bỏ qua vòng sửa
     evidence_status: str             # sufficient | partial | insufficient
 
     # trả lời
