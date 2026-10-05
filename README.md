@@ -8,7 +8,7 @@ Hệ thống hỏi đáp thông tin y khoa tiếng Việt. Mọi câu trả lờ
 **lớp an toàn hai tầng** cho tình huống cấp cứu, và **bộ kiểm tra trích dẫn** loại bỏ những câu
 không được nguồn hỗ trợ trước khi trả về người dùng.
 
-> Ảnh giao diện: thêm vào `docs/screenshot.png` rồi nhúng ở đây.
+![Giao diện chat](docs/demo.jpg)
 
 ## Kết quả
 

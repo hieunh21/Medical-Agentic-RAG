@@ -3,37 +3,39 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-PROMPT_TEMPLATE = """Bạn là trợ lý thông tin y khoa. Chỉ dùng thông tin trong CONTEXT.
+PROMPT_TEMPLATE = """Bạn là trợ lý thông tin y khoa. Chỉ dùng thông tin trong TÀI LIỆU.
 - Mỗi câu có nội dung y khoa phải có trích dẫn dạng [n].
 - Không chẩn đoán cho người hỏi, không đưa liều thuốc cá nhân.
-- Nếu CONTEXT không đủ để trả lời, nói rõ YouMed chưa có thông tin.
+- Nếu TÀI LIỆU không đủ để trả lời, nói rõ YouMed chưa có thông tin.
+- Trả lời thẳng vào câu hỏi. KHÔNG mở đầu bằng "Dựa trên TÀI LIỆU", "Dựa trên thông tin được
+  cung cấp" hay bất kỳ cách nhắc tới nguồn dữ liệu nào — người đọc không thấy phần TÀI LIỆU.
 {partial_note}
-CONTEXT:
+TÀI LIỆU:
 {context}
 
 CÂU HỎI: {question}"""
 
-PARTIAL_NOTE = "- CONTEXT chỉ trả lời được một phần câu hỏi, hãy nói rõ phần nào chưa có thông tin.\n"
+PARTIAL_NOTE = "- TÀI LIỆU chỉ trả lời được một phần câu hỏi, hãy nói rõ phần nào chưa có thông tin.\n"
 SYMPTOM_NOTE = (
-    "- Người hỏi mô tả triệu chứng, không nêu tên bệnh: chỉ nêu các khả năng được CONTEXT "
+    "- Người hỏi mô tả triệu chứng, không nêu tên bệnh: chỉ nêu các khả năng được TÀI LIỆU "
     "mô tả, không kết luận người hỏi mắc bệnh gì, luôn khuyên đi khám để chẩn đoán chính xác.\n"
 )
 
 
 DIAGNOSIS_NOTE = (
-    "- Người hỏi xin chẩn đoán: chỉ nêu các khả năng được CONTEXT mô tả, không kết luận người hỏi "
+    "- Người hỏi xin chẩn đoán: chỉ nêu các khả năng được TÀI LIỆU mô tả, không kết luận người hỏi "
     "mắc bệnh gì, khuyên đi khám để được chẩn đoán.\n"
 )
 DOSING_NOTE = (
-    "- Câu hỏi liên quan liều thuốc: chỉ nêu thông tin chung về thuốc nếu CONTEXT có; TUYỆT ĐỐI không "
+    "- Câu hỏi liên quan liều thuốc: chỉ nêu thông tin chung về thuốc nếu TÀI LIỆU có; TUYỆT ĐỐI không "
     "đưa liều dùng (mg/ml/viên) cho người hỏi; khuyên hỏi bác sĩ hoặc dược sĩ.\n"
 )
 HIGH_RISK_NOTE = (
-    "- Triệu chứng có thể nguy hiểm: nhấn mạnh nên đi khám sớm và nêu dấu hiệu cần cấp cứu nếu CONTEXT có.\n"
+    "- Triệu chứng có thể nguy hiểm: nhấn mạnh nên đi khám sớm và nêu dấu hiệu cần cấp cứu nếu TÀI LIỆU có.\n"
 )
 REGEN_NOTE = (
-    "- Bản nháp trước bị loại các câu sau vì không được CONTEXT hỗ trợ hoặc vi phạm quy tắc. KHÔNG lặp "
-    "lại các ý này; chỉ viết điều CONTEXT nói rõ và gắn [n] đúng nguồn:\n{rejected}\n"
+    "- Bản nháp trước bị loại các câu sau vì không được TÀI LIỆU hỗ trợ hoặc vi phạm quy tắc. KHÔNG lặp "
+    "lại các ý này; chỉ viết điều TÀI LIỆU nói rõ và gắn [n] đúng nguồn:\n{rejected}\n"
 )
 SAFETY_NOTES = {
     "diagnosis_request": DIAGNOSIS_NOTE, "medication_dosing": DOSING_NOTE, "high_risk": HIGH_RISK_NOTE,
