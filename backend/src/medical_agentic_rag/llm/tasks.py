@@ -9,7 +9,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class TaskSpec:
-    model_tier: str  # "fast" | "strong" | "judge"
+    model_tier: str  # "lite" | "fast" | "strong" | "judge"
     temperature: float
     max_output_tokens: int
     # 0 = tắt thinking hẳn; -1 = để model tự quyết mức thinking (dynamic).
@@ -23,7 +23,9 @@ class TaskSpec:
 
 TASKS: dict[str, TaskSpec] = {
     "generate_answer": TaskSpec("strong", 0.2, 1024),
-    "grade_evidence": TaskSpec("fast", 0.0, 1024),
+    # grade là phân loại có/không trên từng nguồn, không cần model mạnh — và nó gửi cả context
+    # nên là task tốn token nhất mỗi câu. Đặt LLM_MODEL_LITE để nó chạy model rẻ hơn.
+    "grade_evidence": TaskSpec("lite", 0.0, 1024),
     "rewrite_query": TaskSpec("fast", 0.3, 512),
     "condense_question": TaskSpec("fast", 0.0, 512),
     # 1024 (không phải 512) — JSON schema (entities/aspects/target_section_types) dễ

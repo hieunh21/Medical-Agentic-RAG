@@ -60,12 +60,25 @@ def group_by_article(chunks: List[dict]) -> List[dict]:
     return list(groups.values())
 
 
-def format_context(chunks: List[dict]) -> str:
+def format_context(chunks: List[dict], max_chars: int = 0) -> str:
+    """max_chars > 0: cắt mỗi đoạn còn max_chars ký tự (dùng cho grade_evidence, xem prompts.py).
+
+    Cắt theo TỪNG đoạn chứ không theo cả nhóm, để đoạn thứ hai của một bài không bị mất hẳn.
+    """
     lines = []
     for i, g in enumerate(group_by_article(chunks), 1):
         updated = f" — cập nhật {g['updated_date']}" if g.get("updated_date") else ""
-        lines.append(f"[{i}] ({g['title']}{updated}) " + "\n".join(g["texts"]))
+        texts = [_clip(t, max_chars) for t in g["texts"]] if max_chars > 0 else g["texts"]
+        lines.append(f"[{i}] ({g['title']}{updated}) " + "\n".join(texts))
     return "\n".join(lines)
+
+
+def _clip(text: str, max_chars: int) -> str:
+    if len(text) <= max_chars:
+        return text
+    cut = text[:max_chars]
+    end = max(cut.rfind(". "), cut.rfind("\n"))  # cắt ở ranh giới câu nếu còn gần cuối
+    return (cut[: end + 1] if end > max_chars * 0.6 else cut).rstrip() + " […]"
 
 
 def build_prompt(

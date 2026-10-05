@@ -26,6 +26,7 @@ _client: genai.Client | None = None
 
 MODEL_BY_TIER = {
     "fast": settings.LLM_MODEL_FAST,
+    "lite": settings.LLM_MODEL_LITE or settings.LLM_MODEL_FAST,  # chưa cấu hình lite -> dùng fast
     "strong": settings.LLM_MODEL_STRONG,
     "judge": settings.LLM_MODEL_JUDGE or settings.LLM_MODEL_STRONG,  # chưa cấu hình judge -> dùng strong
 }

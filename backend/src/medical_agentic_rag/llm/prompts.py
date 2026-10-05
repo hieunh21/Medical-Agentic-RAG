@@ -7,6 +7,7 @@ from typing import List
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 
 from medical_agentic_rag.answer import format_context, group_by_article
+from medical_agentic_rag.config import settings
 
 GRADE_TEMPLATE = """Bạn chấm điểm evidence cho hệ thống hỏi đáp y khoa.
 Với MỖI chunk trong CONTEXT, xác định:
@@ -24,8 +25,10 @@ Trả về đúng schema JSON; trường n phải khớp số thứ tự [n] c�
 
 
 def build_grade_prompt(question: str, chunks: List[dict], aspects: List[str]) -> str:
+    """Context cắt ngắn theo settings.GRADE_CHUNK_CHARS — grade là task tốn token nhất mỗi câu."""
     return GRADE_TEMPLATE.format(
-        aspects=", ".join(aspects), question=question, context=format_context(chunks),
+        aspects=", ".join(aspects), question=question,
+        context=format_context(chunks, max_chars=settings.GRADE_CHUNK_CHARS),
     )
 
 

@@ -15,6 +15,9 @@ class Settings:
     LLM_MODEL_FAST = os.getenv("LLM_MODEL_FAST", "")
     LLM_MODEL_STRONG = os.getenv("LLM_MODEL_STRONG", "")
     LLM_MODEL_JUDGE = os.getenv("LLM_MODEL_JUDGE", "")
+    # Tier rẻ cho task phân loại (grade_evidence chiếm ~34% token mỗi câu vì gửi cả context).
+    # Để trống -> dùng LLM_MODEL_FAST, tức không đổi hành vi.
+    LLM_MODEL_LITE = os.getenv("LLM_MODEL_LITE", "")
     LLM_TIMEOUT_MS = int(os.getenv("LLM_TIMEOUT_MS", "30000"))
     MAX_LLM_CALLS_PER_REQUEST = int(os.getenv("MAX_LLM_CALLS_PER_REQUEST", "10"))
 
@@ -38,6 +41,9 @@ class Settings:
     # Corrective (Phase 2)
     MAX_CORRECTIONS = int(os.getenv("MAX_CORRECTIONS", "2"))
     COVERAGE_THRESHOLD = float(os.getenv("COVERAGE_THRESHOLD", "0.75"))
+    # Số ký tự mỗi đoạn gửi cho grade_evidence. Grader chỉ cần phán "đoạn này có liên quan
+    # không, trả lời khía cạnh nào" nên không cần nguyên văn; 0 = không cắt.
+    GRADE_CHUNK_CHARS = int(os.getenv("GRADE_CHUNK_CHARS", "600"))
 
     # Hội thoại + Agent (Phase 3)
     CHECKPOINT_DB = os.getenv("CHECKPOINT_DB", "data/sessions.sqlite")
