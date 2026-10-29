@@ -28,16 +28,21 @@ trọng không kém giá trị trung tâm.
 | Dừng nhầm (càng thấp càng tốt) | 0.21 [0.08–0.48] |
 | Độ trễ P95 | khoảng 55s (đo khi chạy song song) |
 
-Retrieval đo riêng trên 234 câu sinh từ chunk, phân tầng độ khó:
+Retrieval đo riêng trên 234 câu sinh từ chunk, phân tầng độ khó (Article@5):
 
 | | easy | medium | hard | Tổng |
 |---|---|---|---|---|
-| Article@5, hybrid + rerank | 0.99 | 0.99 | 0.68 | 0.89 |
+| Baseline hybrid + rerank | 1.00 | 1.00 | 0.74 | 0.92 |
+| Hệ thống đầy đủ | 0.99 | 0.99 | 0.68 | 0.89 |
+
+Hệ thống đầy đủ thấp hơn baseline vì 9 câu bị lớp an toàn dừng lại và được tính là trượt; bỏ
+chúng ra thì 0.93 so với 0.92. Nghĩa là các tầng agentic không cải thiện việc *tìm đúng bài* —
+giá trị của chúng nằm ở an toàn, trích dẫn và câu hỏi nhiều khía cạnh.
 
 Routing accuracy (phân loại câu hỏi): **0.858** trên 106 câu. 113 unit test, không cần network.
 
-\* Faithfulness và "trích dẫn đúng nguồn" dùng LLM-as-judge **chưa hiệu chuẩn bằng người** — là
-chỉ số tham khảo, không phải con số tuyệt đối. Xem phần Giới hạn.
+\* "Trích dẫn đúng nguồn" dùng LLM-as-judge **chưa hiệu chuẩn bằng người** — là chỉ số tham
+khảo, không phải con số tuyệt đối.
 
 ## Kiến trúc
 
@@ -68,7 +73,7 @@ analyze_query --> out_of_scope --> template --> END
       |   emergency dạng "kiến thức chung" thì hạ nhãn, trả lời kèm khuyến cáo 115
       v
    route theo question_type
-      +- definition           -> hybrid -> rerank -> (đủ tự tin? generate : grade)
+      +- definition           -> hybrid -> rerank -> grade  (fast path bỏ grade: mặc định tắt)
       +- section_lookup       -> khớp tên bài (fuzzy, không LLM) + hybrid không lọc -> rerank -> grade
       +- symptom_to_condition -> hybrid -> rerank -> grade
       +- comparison           -> hybrid -> rerank -> grade
@@ -154,7 +159,7 @@ tên rõ. Đã cắt subquery cho route này. Nhưng `multi_aspect` thì ngượ
 bài đó. Corpus có nhiều bài cùng một bệnh (4 bài tăng huyết áp, 2 bài cúm mùa), nên khi bài gold
 là bài "anh em" thì mất hẳn. Sửa thành gộp ứng viên lọc theo bài với ứng viên không lọc:
 **Article@5 từ 0.59 lên 0.97** trên 217 câu, cứu 83 câu và không làm mất câu nào. Route này
-chiếm khoảng 58% số câu nên đây là bản sửa lớn nhất.
+chiếm 69% số câu nên đây là bản sửa lớn nhất.
 
 **Lỗi parse JSON làm pipeline thoái hoá im lặng.** Model trả `target_section_types` dạng object
 thay vì danh sách, khiến 25–40% lời gọi `analyze_query` thất bại. Vì temperature 0 nên thử lại
