@@ -95,6 +95,13 @@ h1 {
   margin-bottom: 12px;
 }
 
+/* "Đang khởi động" là trạng thái bình thường của bản demo free, không phải cảnh báo */
+.banner.info {
+  background: transparent;
+  border-color: var(--accent);
+  color: var(--muted);
+}
+
 /* ---------------------------------------------------------------- messages */
 main {
   flex: 1;

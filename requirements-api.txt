@@ -1,0 +1,19 @@
+# Backend khi deploy (Render): không torch, không crawler. Embed + rerank chạy trên Hugging Face ZeroGPU
+# Space (deploy/hf_models_space/), gọi qua gradio_client. Ghim đúng phiên bản đã chạy thử.
+# Dev / ingest / eval vẫn dùng requirements.txt (+ model_server/requirements.txt).
+fastapi==0.141.1
+uvicorn==0.54.0
+pydantic==2.13.5
+python-dotenv==1.2.3
+PyYAML==6.0.3
+requests==2.34.2
+httpx==0.28.1
+qdrant-client==1.19.1
+google-genai==2.25.0
+langgraph==1.2.12
+langgraph-checkpoint==4.2.0
+langgraph-checkpoint-sqlite==3.1.1
+langchain-core==1.6.6
+aiosqlite==0.22.1
+RapidFuzz==3.14.6
+gradio_client==2.7.2

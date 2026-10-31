@@ -11,7 +11,7 @@ from medical_agentic_rag.graph.state import DEFAULT_ASPECT, State
 from medical_agentic_rag.llm.client import run_task
 from medical_agentic_rag.llm.prompts import build_analyze_prompt
 from medical_agentic_rag.llm.schemas import QueryAnalysis
-from medical_agentic_rag.safety.rules import more_severe
+from medical_agentic_rag.safety.rules import STOP_LABELS, more_severe
 
 
 # Không phân loại được -> question_type rỗng -> route_by_type rơi về hybrid_retrieve.
@@ -25,7 +25,10 @@ async def analyze_query(state: State) -> dict:
     # vẫn trả lời nhưng chèn khuyến cáo gọi 115 (xem validate.py). Mơ hồ / lỗi LLM -> giữ nguyên, tức là dừng.
     emergency_topic = label == "emergency" and analysis.situation == "general"
     if emergency_topic:
-        label = "normal"
+        # Hạ về nhãn LLM tự gán, không về thẳng "normal": "Ngộ độc paracetamol ở liều bao nhiêu?" khớp rule
+        # emergency nhưng LLM gán medication_dosing — hạ về normal thì mất ràng buộc liều thuốc ở generate và
+        # bộ lọc mg/viên ở validator. LLM tự gán emergency (mâu thuẫn với "general") thì mới về normal.
+        label = analysis.safety_label if analysis.safety_label not in STOP_LABELS else "normal"
     return {
         "question_type": analysis.question_type,
         "safety_label": label,

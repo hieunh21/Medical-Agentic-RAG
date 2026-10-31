@@ -22,11 +22,13 @@ class Settings:
     MAX_LLM_CALLS_PER_REQUEST = int(os.getenv("MAX_LLM_CALLS_PER_REQUEST", "10"))
 
     # Qdrant
-    QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
+    # 127.0.0.1, không phải localhost: trên Windows localhost phân giải sang IPv6 trước, mà server chỉ
+    # nghe IPv4, nên MỖI request chờ ~2s rồi mới quay về IPv4 (đo: embed 2279 ms -> 239 ms).
+    QDRANT_URL = os.getenv("QDRANT_URL", "http://127.0.0.1:6333")
     QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "youmed_medical")
 
     # Model server
-    MODEL_SERVER_URL = os.getenv("MODEL_SERVER_URL", "http://localhost:8001")
+    MODEL_SERVER_URL = os.getenv("MODEL_SERVER_URL", "http://127.0.0.1:8001")  # xem ghi chú QDRANT_URL
 
     # Retrieval (Phase 1)
     DENSE_PREFETCH = int(os.getenv("DENSE_PREFETCH", "40"))
@@ -55,6 +57,15 @@ class Settings:
     # mẫu nhỏ) cho thấy chưa thắng rõ baseline, nhưng khác với "comparison" (đã có
     # bằng chứng đủ mạnh để cắt), ở đây chưa đủ bằng chứng để bỏ — xem eval/run_routing_compare.py.
     AGENT_ENABLED = os.getenv("RESEARCH_AGENT_ENABLED", "true").lower() == "true"
+
+    # API công khai (deploy). Mặc định cho dev: chỉ frontend local, không giới hạn lượt hỏi.
+    ALLOWED_ORIGINS = [
+        o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
+        if o.strip()
+    ]
+    # Chặn người lạ tiêu hết credit LLM khi link demo công khai. 0 = tắt.
+    RATE_LIMIT_PER_IP_HOUR = int(os.getenv("RATE_LIMIT_PER_IP_HOUR", "0"))
+    DAILY_QUESTION_CAP = int(os.getenv("DAILY_QUESTION_CAP", "0"))
 
 
 settings = Settings()

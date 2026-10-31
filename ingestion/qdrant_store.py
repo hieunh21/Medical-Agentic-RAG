@@ -7,15 +7,23 @@ from typing import List, Optional
 
 from qdrant_client import QdrantClient, models
 
-QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
+QDRANT_URL = os.getenv("QDRANT_URL", "http://127.0.0.1:6333")  # không dùng localhost: xem config.py
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY") or None  # Qdrant Cloud cần; Qdrant local (docker) để trống
 QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "youmed_medical")
 DENSE_DIM = 768
 
 PAYLOAD_KEYWORD_FIELDS = ["article_id", "category", "section_type", "chunk_type"]
 
+_client: Optional[QdrantClient] = None
+
 
 def get_client() -> QdrantClient:
-    return QdrantClient(url=QDRANT_URL)
+    """Một client dùng chung cho cả process: trước đây mỗi retrieve() tạo client mới, tức một kết nối
+    HTTP mới — với Qdrant Cloud (TLS, khác vùng) mỗi lần bắt tay như vậy tốn thêm hàng trăm ms."""
+    global _client
+    if _client is None:
+        _client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY, timeout=30)
+    return _client
 
 
 def point_id(chunk_id: str) -> str:

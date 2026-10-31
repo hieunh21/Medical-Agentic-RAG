@@ -16,9 +16,13 @@ sys.path.insert(0, str(Path(__file__).parent / "backend" / "src"))
 import uvicorn
 
 if __name__ == "__main__":
+    # Render (và đa số PaaS) cấp cổng qua biến PORT và cần nghe trên mọi interface.
+    on_paas = bool(os.getenv("PORT"))
     uvicorn.run(
         "medical_agentic_rag.api.app:app",
-        host=os.getenv("API_HOST", "127.0.0.1"),
-        port=int(os.getenv("API_PORT", "8000")),
+        host=os.getenv("API_HOST") or ("0.0.0.0" if on_paas else "127.0.0.1"),
+        port=int(os.getenv("PORT") or os.getenv("API_PORT", "8000")),
         reload="--reload" in sys.argv,
+        proxy_headers=on_paas,  # tin X-Forwarded-* của proxy Render (IP thật cho rate limit, https)
+        forwarded_allow_ips="*" if on_paas else None,
     )

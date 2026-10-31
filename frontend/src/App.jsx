@@ -12,18 +12,46 @@ const EXAMPLES = [
 const DISCLAIMER =
   "Thông tin tham khảo từ các bài viết y khoa trên YouMed, không thay thế chẩn đoán hoặc chỉ định của bác sĩ.";
 
+// Bản deploy chạy trên hạ tầng miễn phí: backend ngủ khi không ai dùng, lần mở đầu phải chờ nó dậy.
+// Hỏi lại /health mỗi 5s cho tới khi mọi thành phần sẵn sàng, quá WARMUP_MS thì báo thành phần nào hỏng.
+const WARMUP_MS = 180_000;
+const RETRY_MS = 5_000;
+
 export default function App() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [sessionId, setSessionId] = useState(null);
   const [health, setHealth] = useState(null);
+  const [warming, setWarming] = useState(true);
   const abortRef = useRef(null);
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
 
   useEffect(() => {
-    fetchHealth().then(setHealth).catch(() => setHealth({ ok: false, services: [] }));
+    let cancelled = false;
+    let timer;
+    const started = Date.now();
+    const check = async () => {
+      let result;
+      try {
+        result = await fetchHealth();
+      } catch {
+        result = { ok: false, services: [] }; // backend chưa dậy hẳn (502/503) hoặc mất mạng
+      }
+      if (cancelled) return;
+      setHealth(result);
+      if (result.ok || Date.now() - started > WARMUP_MS) {
+        setWarming(false);
+        return;
+      }
+      timer = setTimeout(check, RETRY_MS);
+    };
+    check();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, []);
 
   useEffect(() => {
@@ -42,7 +70,7 @@ export default function App() {
   const send = useCallback(
     (text) => {
       const question = text.trim();
-      if (!question || busy) return;
+      if (!question || busy || warming) return;
       setInput("");
       setBusy(true);
       setMessages((prev) => [
@@ -58,8 +86,10 @@ export default function App() {
           patchLast((m) => ({
             ...m,
             step: label,
-            // generate xong -> validator đang chạy: bản nháp trên màn hình chưa phải bản chốt
-            state: step === "citation_validator" ? "validating" : m.state,
+            // nhãn tới lúc bước BẮT ĐẦU: validator chạy -> bản nháp chưa chốt; generate chạy lại
+            // (validator yêu cầu viết lại) -> quay về "đang viết"
+            state:
+              step === "citation_validator" ? "validating" : step === "generate_answer" ? "streaming" : m.state,
           })),
         onSources: (sources) => patchLast((m) => (m.content ? m : { ...m, sources })),
         onToken: (piece) => patchLast((m) => ({ ...m, content: m.content + piece })),
@@ -72,7 +102,9 @@ export default function App() {
             return {
               ...m,
               content: answer,
-              sources: sources?.length ? sources : m.sources,
+              // luôn lấy nguồn của bản CHỐT: rỗng nghĩa là validator đã lọc hết câu / không có bài phù hợp.
+              // Trước đây rỗng thì giữ nguồn tạm, nên "YouMed chưa có bài viết..." lại kèm cả danh sách nguồn.
+              sources: sources ?? m.sources,
               meta,
               state: "done",
               step: "",
@@ -87,7 +119,7 @@ export default function App() {
         },
       });
     },
-    [busy, patchLast, sessionId]
+    [busy, warming, patchLast, sessionId]
   );
 
   const reset = async () => {
@@ -99,7 +131,7 @@ export default function App() {
     inputRef.current?.focus();
   };
 
-  const down = health && !health.ok;
+  const down = !warming && health && !health.ok;
 
   return (
     <div className="app">
@@ -115,11 +147,20 @@ export default function App() {
         )}
       </header>
 
+      {warming && (
+        <div className="banner info" role="status">
+          Đang khởi động hệ thống… Bản demo chạy trên hạ tầng miễn phí, tự tắt khi không có ai dùng, nên lần
+          mở đầu có thể mất khoảng một phút.
+        </div>
+      )}
+
       {down && (
         <div className="banner">
-          Một số thành phần chưa sẵn sàng:{" "}
-          {health.services.filter((s) => !s.ok).map((s) => `${s.name} (${s.detail})`).join(", ")}. Cần Qdrant
-          ở :6333 và model server ở :8001.
+          Một số thành phần chưa sẵn sàng
+          {health.services.some((s) => !s.ok)
+            ? `: ${health.services.filter((s) => !s.ok).map((s) => `${s.name} (${s.detail})`).join(", ")}`
+            : " (không kết nối được máy chủ)"}
+          . Bạn thử tải lại trang sau ít phút.
         </div>
       )}
 
@@ -129,7 +170,7 @@ export default function App() {
             <p className="hint">Thử một câu hỏi:</p>
             <div className="examples">
               {EXAMPLES.map((q) => (
-                <button key={q} onClick={() => send(q)} disabled={busy} type="button">
+                <button key={q} onClick={() => send(q)} disabled={busy || warming} type="button">
                   {q}
                 </button>
               ))}
@@ -160,10 +201,10 @@ export default function App() {
               send(input);
             }
           }}
-          disabled={busy}
+          disabled={busy || warming}
         />
-        <button type="submit" disabled={busy || !input.trim()}>
-          {busy ? "Đang trả lời…" : "Gửi"}
+        <button type="submit" disabled={busy || warming || !input.trim()}>
+          {busy ? "Đang trả lời…" : warming ? "Đang khởi động…" : "Gửi"}
         </button>
       </form>
 

@@ -1,0 +1,61 @@
+# Render Blueprint: Dashboard -> New -> Blueprint -> chọn repo này. Tạo 2 service miễn phí:
+#   hhieu21-medrag-api  backend FastAPI (ngủ sau 15 phút không ai dùng, dậy mất ~1 phút)
+#   hhieu21-medrag      frontend tĩnh trên CDN (không bao giờ ngủ)
+# Embed + rerank chạy trên Hugging Face ZeroGPU Space (deploy/hf_models_space/), vector ở Qdrant Cloud.
+#
+# Các biến `sync: false` là secret: Render hỏi giá trị lúc tạo Blueprint, không lưu trong repo.
+# Nếu Render cấp URL khác tên dưới đây (tên đã có người dùng), sửa ALLOWED_ORIGINS và VITE_API_URL cho khớp.
+services:
+  - type: web
+    name: hhieu21-medrag-api
+    runtime: python
+    plan: free
+    region: frankfurt          # cùng vùng với cluster Qdrant Cloud (eu-central-1)
+    buildCommand: pip install -r requirements-api.txt
+    startCommand: python serve.py
+    healthCheckPath: /docs     # không dùng /api/v1/health: nó gọi Space, có thể mất cả phút
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.5"
+      # model: ZeroGPU Space, gọi bằng token chỉ đọc
+      - key: MODEL_SPACE
+        value: hhieu21/medrag-models
+      - key: HF_TOKEN
+        sync: false
+      # vector DB: Qdrant Cloud, key chỉ đọc (backend không ghi gì)
+      - key: QDRANT_URL
+        sync: false
+      - key: QDRANT_API_KEY
+        sync: false
+      # LLM
+      - key: SHOPAIKEY_API_KEY
+        sync: false
+      - key: GENAI_BASE_URL
+        value: https://api.shopaikey.com
+      - key: LLM_MODEL_FAST
+        sync: false
+      - key: LLM_MODEL_STRONG
+        sync: false
+      - key: LLM_MODEL_JUDGE
+        sync: false
+      # disk của Render free không bền: mất khi ngủ / restart — hội thoại chỉ sống trong một lần thức
+      - key: CHECKPOINT_DB
+        value: /tmp/sessions.sqlite
+      - key: TRACE_LOG
+        value: /tmp/traces.jsonl
+      # link công khai: chặn người lạ tiêu hết credit LLM
+      - key: RATE_LIMIT_PER_IP_HOUR
+        value: "10"
+      - key: DAILY_QUESTION_CAP
+        value: "100"
+      - key: ALLOWED_ORIGINS
+        value: https://hhieu21-medrag.onrender.com
+
+  - type: web
+    name: hhieu21-medrag
+    runtime: static
+    buildCommand: cd frontend && npm ci && npm run build
+    staticPublishPath: frontend/dist
+    envVars:
+      - key: VITE_API_URL      # nhúng vào bản build lúc build, đổi giá trị thì phải deploy lại
+        value: https://hhieu21-medrag-api.onrender.com

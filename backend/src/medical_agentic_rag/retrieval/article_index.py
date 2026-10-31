@@ -1,6 +1,10 @@
 """Index title+aliases của toàn bộ bài giữ trong bộ nhớ — khớp tên bài bằng code (mục 8.3).
 
-Không cần LLM, chạy vài mili giây. Build 1 lần từ frontmatter của data/processed/articles/.
+Không cần LLM, chạy vài mili giây. Build 1 lần, từ một trong hai nguồn:
+  1. frontmatter của data/processed/articles/ (dev: có đủ related_urls cho tool related_articles);
+  2. payload trong Qdrant khi thư mục trên không có — trường hợp deploy: nội dung bài YouMed có bản
+     quyền nên không nằm trong repo, nhưng mỗi chunk đã mang article_id/title/aliases/url.
+     related_urls không có trong payload nên tool related_articles của agent trả rỗng.
 """
 from __future__ import annotations
 
@@ -33,24 +37,59 @@ class ArticleEntry:
         self.related_urls = related_urls
 
 
-@lru_cache(maxsize=1)
-def _load_index() -> tuple[list[ArticleEntry], dict[str, int]]:
-    """Trả về (entries, name_norm -> index trong entries) — mỗi (title hoặc alias) một dòng tra."""
-    entries: list[ArticleEntry] = []
-    lookup: dict[str, int] = {}
-    for path in sorted(glob.glob(f"{ARTICLES_DIR}/*.md")):
+def _entries_from_files(paths: list[str]) -> list[ArticleEntry]:
+    entries = []
+    for path in paths:
         raw = open(path, encoding="utf-8").read()
         fm = yaml.safe_load(raw.split("---", 2)[1]) or {}
-        entry = ArticleEntry(
+        entries.append(ArticleEntry(
             article_id=fm["article_id"], title=fm["title"],
             aliases=fm.get("aliases") or [], canonical_url=fm["canonical_url"],
             related_urls=fm.get("related_urls") or [],
+        ))
+    return entries
+
+
+def _entries_from_qdrant() -> list[ArticleEntry]:
+    """Một entry mỗi article_id, lấy từ payload chunk. Lỗi Qdrant thì ném ra: lru_cache không lưu
+    exception, nên lần gọi sau thử lại thay vì kẹt với một index rỗng suốt vòng đời process."""
+    from ingestion.qdrant_store import QDRANT_COLLECTION, get_client  # import muộn: tránh vòng import
+
+    client = get_client()
+    by_id: dict[str, ArticleEntry] = {}
+    offset = None
+    while True:
+        points, offset = client.scroll(
+            QDRANT_COLLECTION, limit=2000, offset=offset, with_vectors=False,
+            with_payload=["article_id", "title", "aliases", "url"],
         )
-        idx = len(entries)
-        entries.append(entry)
+        for p in points:
+            pl = p.payload or {}
+            if pl.get("article_id") and pl["article_id"] not in by_id:
+                by_id[pl["article_id"]] = ArticleEntry(
+                    article_id=pl["article_id"], title=pl.get("title") or "",
+                    aliases=pl.get("aliases") or [], canonical_url=pl.get("url") or "", related_urls=[],
+                )
+        if offset is None:
+            break
+    return sorted(by_id.values(), key=lambda e: e.article_id)
+
+
+@lru_cache(maxsize=1)
+def _load_index() -> tuple[list[ArticleEntry], dict[str, int]]:
+    """Trả về (entries, name_norm -> index trong entries) — mỗi (title hoặc alias) một dòng tra."""
+    paths = sorted(glob.glob(f"{ARTICLES_DIR}/*.md"))
+    entries = _entries_from_files(paths) if paths else _entries_from_qdrant()
+    lookup: dict[str, int] = {}
+    for idx, entry in enumerate(entries):
         for name in [entry.title, *entry.aliases]:
             lookup[_normalize(name)] = idx
     return entries, lookup
+
+
+def warm() -> int:
+    """Dựng index ngay lúc khởi động (gọi từ lifespan của API) — để câu hỏi đầu tiên không phải chờ."""
+    return len(_load_index()[0])
 
 
 @lru_cache(maxsize=1)

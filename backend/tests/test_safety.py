@@ -141,6 +141,15 @@ def test_llm_noi_kien_thuc_chung_thi_ha_emergency_va_danh_dau_chu_de(monkeypatch
     assert out["safety_label"] == "normal" and out["emergency_topic"] is True  # rule hoãn + LLM nói chung
 
 
+def test_ha_emergency_ve_nhan_cua_llm_chu_khong_ve_normal(monkeypatch):
+    # "Ngộ độc paracetamol ở liều bao nhiêu?": rule bắt "ngộ độc" (hoãn), LLM nói hỏi liều + kiến thức chung
+    out, _ = run_analyze(monkeypatch, analysis("medication_dosing", "general"), prior_label="emergency", deferred=True)
+    assert out["safety_label"] == "medication_dosing" and out["emergency_topic"] is True
+    out, _ = run_analyze(monkeypatch, analysis("high_risk", "general"), prior_label="emergency", deferred=True)
+    assert out["safety_label"] == "high_risk" and out["emergency_topic"] is True
+    assert route_by_type({**out, "question_type": "definition"}) != "safety_response"  # vẫn trả lời
+
+
 def test_llm_noi_tinh_huong_ca_nhan_thi_van_dung(monkeypatch):
     out, _ = run_analyze(monkeypatch, analysis("emergency", "personal"))
     assert out["safety_label"] == "emergency" and out["emergency_topic"] is False
